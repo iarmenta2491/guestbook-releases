@@ -274,8 +274,18 @@ app.whenReady().then(async () => {
   createWindow();
 
   // ── Auto-updater event wiring ────────────────────────────────────────────
-  autoUpdater.autoDownload    = true;   // download silently in background
-  autoUpdater.autoInstallOnAppQuit = false; // we handle install explicitly
+  // Explicitly set the GitHub repo so the updater never guesses the feed URL.
+  autoUpdater.setFeedURL({
+    provider:       'github',
+    owner:          'iarmenta2491',
+    repo:           'guestbook-releases',
+    releaseType:    'release',     // only stable releases, not pre-releases
+  });
+  autoUpdater.autoDownload         = true;   // download silently in background
+  autoUpdater.autoInstallOnAppQuit = false;  // we handle install explicitly
+  autoUpdater.allowPrerelease      = false;  // stable releases only
+  autoUpdater.allowDowngrade       = false;  // never roll back
+  console.log('[Updater] Feed: github / iarmenta2491/guestbook-releases');
 
   autoUpdater.on('checking-for-update', () => {
     broadcastUpdateStatus({ state: 'checking', version: null, progress: null, error: null });
