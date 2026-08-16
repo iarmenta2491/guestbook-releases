@@ -1,0 +1,325 @@
+/* ==========================================================================
+   ReviewScreen.css — Unified replay + action buttons layout
+   ========================================================================== */
+
+/* ── Base screen ──────────────────────────────────────────────────────────── */
+.review-screen {
+  background:
+    radial-gradient(ellipse at 30% 60%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse at 75% 20%, rgba(45, 212, 191, 0.08) 0%, transparent 55%),
+    var(--bg-primary);
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+}
+
+/* ── Decorative background layer ──────────────────────────────────────────── */
+.review-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 15%, rgba(45, 212, 191, 0.06) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Main two-panel layout ────────────────────────────────────────────────── */
+.review-layout {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Top: Media area ──────────────────────────────────────────────────────── */
+.review-media-area {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px 12px;
+  min-height: 0;          /* lets flex shrink below content height */
+  overflow: hidden;
+}
+
+/* ── Bottom: Action bar — always visible, fixed height ───────────────────── */
+.review-actions-area {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 40px 32px;
+  background: linear-gradient(
+    to top,
+    rgba(7, 7, 26, 0.85) 0%,
+    rgba(7, 7, 26, 0.60) 60%,
+    transparent 100%
+  );
+}
+
+/* ── 3-button row ─────────────────────────────────────────────────────────── */
+.review-btn-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.review-action-btn {
+  min-width: 180px;
+  height: 68px;
+  font-size: 1.2rem !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-full) !important;
+  letter-spacing: 0.03em;
+  flex: 1;
+  max-width: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.review-btn-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.review-complete-btn {
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.5), 0 4px 24px rgba(34, 197, 94, 0.4) !important;
+  animation: glow-green 2.5s ease-in-out infinite !important;
+}
+
+@keyframes glow-green {
+  0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.4), 0 4px 24px rgba(34, 197, 94, 0.3); }
+  50%       { box-shadow: 0 0 50px rgba(34, 197, 94, 0.8), 0 4px 40px rgba(34, 197, 94, 0.6); }
+}
+
+/* ── Hint text & error ────────────────────────────────────────────────────── */
+.review-hint {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-align: center;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.review-hint strong { color: var(--text-secondary); }
+
+.review-error {
+  font-size: 0.95rem;
+  color: var(--rose-400);
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  text-align: center;
+}
+
+/* ── VIDEO: embedded player card ──────────────────────────────────────────── */
+.review-video-card {
+  position: relative;
+  width: 100%;
+  max-width: min(90vh * 1.78, 100%);   /* 16:9 max-width based on height */
+  height: 100%;
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--glass-border),
+              0 8px 40px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(139, 92, 246, 0.2);
+}
+
+.review-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: var(--radius-lg);
+}
+
+/* Tap-to-play/pause transparent overlay */
+.review-video-overlay-btn {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.review-play-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: #fff;
+  padding-left: 4px;   /* optical center for ▶ glyph */
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.review-video-overlay-btn:hover .review-play-icon {
+  transform: scale(1.08);
+}
+
+/* "Your Recording" badge bottom-left */
+.review-vid-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+}
+
+/* ── AUDIO-ONLY: audio card ───────────────────────────────────────────────── */
+.review-audio-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 48px 64px;
+  min-width: 360px;
+  max-width: 560px;
+  border-radius: var(--radius-lg);
+}
+
+.review-audio-icon { font-size: 4rem; }
+
+.review-audio-label {
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: center;
+}
+
+/* Animated waveform — only animates when .playing is present */
+.review-audio-wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 60px;
+}
+
+.review-audio-bar {
+  width: 5px;
+  height: 8px;
+  background: linear-gradient(to top, var(--purple-500), var(--teal-400));
+  border-radius: var(--radius-full);
+  opacity: 0.4;
+  transform-origin: bottom;
+  transition: opacity 0.3s;
+}
+
+.review-audio-wave.playing .review-audio-bar {
+  animation: audio-wave 1.1s ease-in-out infinite alternate;
+  opacity: 1;
+}
+
+@keyframes audio-wave {
+  0%   { height: 8px;  opacity: 0.5; }
+  100% { height: 52px; opacity: 1; }
+}
+
+/* Replay button */
+.review-replay-btn {
+  margin-top: 4px;
+  padding: 10px 28px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--glass-md);
+  border: 1px solid var(--glass-border-bright);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  outline: none;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.review-replay-btn:hover {
+  background: var(--glass-lg);
+  transform: translateY(-1px);
+}
+
+/* ── REPLAY DISABLED: static ready card ──────────────────────────────────── */
+.review-static-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 56px 64px;
+  min-width: 360px;
+  max-width: 560px;
+  text-align: center;
+  border-radius: var(--radius-lg);
+}
+
+.review-static-icon {
+  font-size: 5rem;
+  animation: float-icon 3s ease-in-out infinite;
+}
+
+@keyframes float-icon {
+  0%, 100% { transform: translateY(0);    }
+  50%       { transform: translateY(-8px); }
+}
+
+.review-static-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.review-static-sub {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.review-static-sub strong {
+  color: var(--teal-400);
+}
+
+/* ── Saving state ─────────────────────────────────────────────────────────── */
+.review-saving {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.review-saving-text {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}

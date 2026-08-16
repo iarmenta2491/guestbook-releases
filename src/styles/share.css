@@ -1,0 +1,202 @@
+/* share.css */
+.share-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 40%, rgba(45,212,191,0.12) 0%, transparent 60%),
+              radial-gradient(ellipse at 30% 70%, rgba(139,92,246,0.1) 0%, transparent 60%),
+              var(--bg-primary);
+  padding: 40px;
+  gap: 32px;
+}
+
+.share-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: fadeIn 0.6s var(--ease-out) both;
+}
+
+.share-emoji {
+  font-size: 5rem;
+  animation: float 3s ease-in-out infinite;
+  line-height: 1;
+}
+
+.share-title {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.share-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Share options */
+.share-options {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  width: 100%;
+  max-width: 900px;
+  animation: fadeIn 0.6s var(--ease-out) 0.2s both;
+}
+
+.share-option-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background: var(--glass-sm);
+  border: 2px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  backdrop-filter: blur(16px);
+  transition: all 0.3s var(--ease-out);
+  font-family: 'Outfit', sans-serif;
+  color: var(--text-primary);
+}
+.share-option-btn:hover {
+  background: var(--glass-md);
+  border-color: var(--purple-400);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-purple);
+}
+.share-option-btn.active {
+  border-color: var(--teal-400);
+  box-shadow: var(--shadow-teal);
+}
+
+.share-option-icon { font-size: 3rem; }
+.share-option-label { font-size: 1.3rem; font-weight: 700; }
+.share-option-hint { font-size: 0.9rem; color: var(--text-secondary); text-align: center; }
+
+/* QR panel */
+.share-qr-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 60px rgba(255,255,255,0.15);
+  animation: fadeInScale 0.5s var(--ease-spring) both;
+}
+
+.share-qr-canvas {
+  border-radius: var(--radius-sm);
+}
+
+.share-qr-url {
+  font-size: 0.9rem;
+  color: #475569;
+  text-align: center;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+/* Countdown ring */
+.share-countdown-ring-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-countdown-ring {
+  transform: rotate(-90deg);
+}
+
+.share-countdown-circle-bg {
+  fill: none;
+  stroke: var(--glass-border);
+  stroke-width: 6;
+}
+
+.share-countdown-circle-fg {
+  fill: none;
+  stroke: var(--teal-400);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear;
+}
+
+.share-countdown-text {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--teal-300);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Email panel */
+.share-email-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 500px;
+  padding: 32px;
+  background: var(--glass-sm);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  animation: fadeInScale 0.5s var(--ease-spring) both;
+}
+
+.share-email-input {
+  padding: 18px 20px;
+  font-size: 1.2rem;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--glass-border);
+  background: var(--glass-xs);
+  color: var(--text-primary);
+  font-family: 'Outfit', sans-serif;
+  outline: none;
+  transition: border-color 0.3s;
+  width: 100%;
+}
+.share-email-input:focus { border-color: var(--teal-400); }
+
+/* Decision countdown */
+.share-decision-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--glass-md);
+}
+.share-decision-fill {
+  height: 100%;
+  background: var(--purple-400);
+  transition: width 1s linear;
+}
+
+/* Done button */
+.share-done-btn {
+  padding: 18px 56px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: var(--glass-md);
+  border: 1px solid var(--glass-border-bright);
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  backdrop-filter: blur(16px);
+  transition: all 0.3s;
+  animation: fadeIn 0.6s var(--ease-out) 0.4s both;
+}
+.share-done-btn:hover { background: var(--glass-lg); transform: translateY(-2px); }

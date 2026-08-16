@@ -1,0 +1,247 @@
+/* ==========================================================================
+   ThankYouScreen.css — Warm, celebratory end screen
+   ========================================================================== */
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+.thankyou-screen {
+  background: radial-gradient(ellipse at 50% 60%, rgba(251, 191, 36, 0.1) 0%, transparent 55%),
+              radial-gradient(ellipse at 20% 30%, rgba(45, 212, 191, 0.1) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 70%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+              var(--bg-primary);
+  overflow: hidden;
+}
+
+/* ── Decorative orbs ─────────────────────────────────────────────────────── */
+.ty-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  animation: float 9s ease-in-out infinite;
+}
+
+.ty-orb-gold {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.18), transparent 65%);
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation-duration: 7s;
+}
+
+.ty-orb-teal {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.14), transparent 65%);
+  bottom: -100px;
+  right: -80px;
+  animation-duration: 11s;
+  animation-delay: -4s;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Confetti Particles
+   Each particle uses CSS custom properties set inline:
+     --x-drift  horizontal drift during fall
+     --r-start  starting rotation
+     --r-end    ending rotation (r-start + ~540deg)
+═══════════════════════════════════════════════════════════════════════════ */
+.ty-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ty-particle {
+  position: absolute;
+  top: -24px;
+  animation-name: ty-fall;
+  animation-timing-function: ease-in;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes ty-fall {
+  0% {
+    transform: translateY(0) translateX(0) rotate(var(--r-start, 0deg));
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(110vh) translateX(var(--x-drift, 0px)) rotate(var(--r-end, 540deg));
+    opacity: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Main content — spring entrance animation
+═══════════════════════════════════════════════════════════════════════════ */
+.ty-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  text-align: center;
+  padding: 0 32px;
+
+  /* Initial state — off-screen + scaled down */
+  opacity: 0;
+  transform: scale(0.7) translateY(40px);
+  transition:
+    opacity  0.65s var(--ease-spring),
+    transform 0.65s var(--ease-spring);
+}
+
+.ty-content-entered {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* ── Emoji ───────────────────────────────────────────────────────────────── */
+.ty-emoji-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+}
+
+.ty-emoji {
+  font-size: 5.5rem;
+  line-height: 1;
+  animation: float 3.5s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+}
+
+.ty-emoji-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--gold-400),
+    var(--teal-400),
+    var(--purple-400),
+    var(--gold-400)
+  );
+  animation: rotate 4s linear infinite;
+  opacity: 0.5;
+  filter: blur(6px);
+}
+
+/* ── Heading ─────────────────────────────────────────────────────────────── */
+.ty-heading {
+  font-size: clamp(3.5rem, 9vw, 7rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.ty-heading-thanks {
+  background: linear-gradient(135deg, var(--gold-400) 0%, var(--teal-400) 50%, var(--purple-300) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: block;
+  animation: shimmer 4s linear infinite;
+  background-size: 200% auto;
+}
+
+/* ── Subtext ─────────────────────────────────────────────────────────────── */
+.ty-subtext {
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  color: var(--text-secondary);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.ty-event-name {
+  color: var(--gold-400);
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────────────── */
+.ty-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.ty-divider-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.4), transparent);
+}
+
+.ty-divider-gem {
+  color: var(--gold-400);
+  font-size: 1rem;
+  opacity: 0.8;
+  animation: pulse-scale 2.5s ease-in-out infinite;
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+.ty-progress-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.ty-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ty-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-400), var(--teal-400), var(--purple-400));
+  border-radius: var(--radius-full);
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+.ty-progress-label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.ty-progress-label strong {
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 1em;
+}
+
+/* ── Return button ───────────────────────────────────────────────────────── */
+.ty-return-btn {
+  margin-top: 4px;
+  min-width: 200px;
+  font-size: 1rem !important;
+  color: var(--text-muted) !important;
+  border-color: var(--glass-border) !important;
+  transition: color 0.2s, border-color 0.2s, transform 0.15s var(--ease-spring) !important;
+}
+
+.ty-return-btn:hover {
+  color: var(--text-primary) !important;
+  border-color: var(--glass-border-bright) !important;
+  transform: translateY(-2px) !important;
+}

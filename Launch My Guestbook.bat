@@ -1,0 +1,6 @@
+@echo off
+title My Guestbook - Launching...
+cd /d "%~dp0"
+echo Starting My Guestbook...
+node_modules\.bin\electron.cmd .
+pause

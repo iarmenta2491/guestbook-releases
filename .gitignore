@@ -1,0 +1,43 @@
+﻿# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+out/
+
+# Electron builder cache
+.cache/
+
+# Vite build
+dist-electron/
+
+# Environment / secrets
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+*.suo
+*.user
+
+# Event data (recordings, user content)
+Events/
+
+# Large binary assets (whisper models/zips)
+assets/models/
+assets/whisper/*.zip
+assets/whisper/*.bin
+
+# Debug / temp
+debug_output.txt
+err.txt
+out.txt

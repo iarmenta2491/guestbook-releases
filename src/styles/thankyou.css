@@ -1,0 +1,126 @@
+/* thankyou.css */
+.thankyou-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 40%, rgba(251,191,36,0.1) 0%, transparent 60%),
+              radial-gradient(ellipse at 20% 80%, rgba(45,212,191,0.12) 0%, transparent 60%),
+              var(--bg-primary);
+  overflow: hidden;
+  gap: 32px;
+  padding: 40px;
+  position: relative;
+}
+
+.thankyou-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  z-index: 2;
+  animation: fadeInScale 0.7s var(--ease-spring) both;
+}
+
+.thankyou-emoji {
+  font-size: clamp(5rem, 12vw, 9rem);
+  animation: float 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 40px rgba(251,191,36,0.4));
+  line-height: 1;
+}
+
+.thankyou-title {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--gold-400), var(--teal-300), var(--purple-300));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+}
+
+.thankyou-subtitle {
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  color: var(--text-secondary);
+  font-weight: 300;
+  max-width: 500px;
+}
+
+/* Countdown bar */
+.thankyou-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 300px;
+  z-index: 2;
+}
+
+.thankyou-countdown-text {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+.thankyou-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--glass-md);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.thankyou-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-400), var(--teal-400));
+  border-radius: var(--radius-full);
+  transition: width 1s linear;
+}
+
+/* Return button */
+.thankyou-return-btn {
+  padding: 14px 40px;
+  background: var(--glass-sm);
+  border: 1px solid var(--glass-border-bright);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(16px);
+  transition: all 0.3s;
+  z-index: 2;
+}
+.thankyou-return-btn:hover { color: var(--text-primary); background: var(--glass-md); }
+
+/* Confetti particles */
+.thankyou-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.confetti-piece {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+  animation: confetti-fall linear forwards;
+}
+
+.confetti-piece.square { border-radius: 2px; }
+.confetti-piece.circle { border-radius: 50%; }
+
+@keyframes confetti-fall {
+  0%   { opacity: 0; transform: translateY(-20px) rotate(0deg); }
+  10%  { opacity: 1; }
+  90%  { opacity: 0.8; }
+  100% { opacity: 0; transform: translateY(110vh) rotate(720deg); }
+}

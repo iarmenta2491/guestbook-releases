@@ -1,0 +1,333 @@
+/* ==========================================================================
+   ShareScreen.css — Success / celebration sharing screen
+   ========================================================================== */
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+.share-screen {
+  background: radial-gradient(ellipse at 25% 40%, rgba(45, 212, 191, 0.14) 0%, transparent 55%),
+              radial-gradient(ellipse at 75% 65%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
+              var(--bg-primary);
+  padding: 24px;
+}
+
+/* ── Decorative orbs ─────────────────────────────────────────────────────── */
+.share-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 10% 90%, rgba(45, 212, 191, 0.06) 0%, transparent 35%),
+    radial-gradient(circle at 90% 10%, rgba(139, 92, 246, 0.06) 0%, transparent 35%);
+}
+
+.share-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: float 8s ease-in-out infinite;
+}
+
+.share-orb-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.15), transparent 70%);
+  top: -100px;
+  right: -80px;
+  animation-delay: 0s;
+}
+
+.share-orb-2 {
+  width: 350px;
+  height: 350px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 70%);
+  bottom: -80px;
+  left: -60px;
+  animation-delay: -3s;
+}
+
+/* ── Main card ───────────────────────────────────────────────────────────── */
+.share-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  padding: 48px 52px;
+  border-color: rgba(45, 212, 191, 0.2) !important;
+  box-shadow:
+    var(--shadow-lg),
+    0 0 60px rgba(45, 212, 191, 0.12),
+    0 0 120px rgba(139, 92, 246, 0.08) !important;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.share-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.share-emoji {
+  font-size: 4rem;
+  animation: float 3.5s ease-in-out infinite;
+  line-height: 1;
+}
+
+.share-title {
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 800;
+  line-height: 1.1;
+  /* gradient-text applied via class */
+}
+
+.share-subtitle {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  min-height: 1.5em;
+}
+
+/* ── Decision panel ──────────────────────────────────────────────────────── */
+.share-decision {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+}
+
+.share-option-row {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  width: 100%;
+}
+
+.share-option-btn {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-width: 180px;
+  height: 120px;
+  border-radius: var(--radius-lg) !important;
+  padding: 20px 32px !important;
+  flex: 1;
+  max-width: 240px;
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.25s var(--ease-out) !important;
+}
+
+.share-option-btn:hover {
+  transform: translateY(-4px) scale(1.03) !important;
+}
+
+.share-option-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.share-option-label {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.share-option-desc {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  font-weight: 400;
+}
+
+/* ── QR code panel ───────────────────────────────────────────────────────── */
+.share-qr-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.share-qr-frame {
+  background: #fff;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 3px solid rgba(45, 212, 191, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.15),
+    0 0 40px rgba(45, 212, 191, 0.25),
+    var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 312px;
+  min-height: 312px;
+}
+
+.share-qr-canvas {
+  display: block;
+  border-radius: 4px;
+}
+
+.share-qr-url {
+  font-size: 0.85rem;
+  color: var(--teal-300);
+  font-family: 'Courier New', monospace;
+  background: rgba(45, 212, 191, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  word-break: break-all;
+  text-align: center;
+  max-width: 360px;
+}
+
+/* ── Email panel ─────────────────────────────────────────────────────────── */
+.share-email-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.share-email-field {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.share-email-input {
+  flex: 1;
+  font-size: 1.05rem !important;
+  padding: 16px 20px !important;
+  border-radius: var(--radius-full) !important;
+  border-color: rgba(45, 212, 191, 0.3) !important;
+}
+
+.share-email-input:focus {
+  border-color: var(--teal-400) !important;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2) !important;
+}
+
+.share-email-send-btn {
+  flex-shrink: 0;
+  min-width: 110px;
+  font-size: 1.05rem !important;
+  border-radius: var(--radius-full) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.share-email-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.share-email-sent-msg {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.share-email-sent-msg strong {
+  color: var(--teal-300);
+}
+
+/* ── Countdown ring + label ───────────────────────────────────────────────── */
+.share-countdown-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.share-ring { overflow: visible; }
+
+.share-countdown-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+/* ── Error ───────────────────────────────────────────────────────────────── */
+.share-error {
+  font-size: 0.9rem;
+  color: var(--rose-400);
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  text-align: center;
+  width: 100%;
+  max-width: 480px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.share-footer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 20px;
+}
+
+.share-done-btn {
+  font-size: 1rem !important;
+  color: var(--text-secondary) !important;
+  border-color: transparent !important;
+}
+
+.share-done-btn:hover {
+  color: var(--text-primary) !important;
+  border-color: var(--glass-border) !important;
+}
+
+.share-done-illuminated {
+  padding: 18px 48px !important;
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  color: rgba(255,255,255,0.95) !important;
+  border: 1.5px solid rgba(139,92,246,0.5) !important;
+  border-radius: 100px !important;
+  background: rgba(139,92,246,0.12) !important;
+  box-shadow: 0 0 18px rgba(139,92,246,0.35), 0 0 40px rgba(139,92,246,0.15) !important;
+  animation: skipPulse 2.5s ease-in-out infinite !important;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s !important;
+}
+.share-done-illuminated:hover {
+  background: rgba(139,92,246,0.22) !important;
+  box-shadow: 0 0 28px rgba(139,92,246,0.55), 0 0 60px rgba(139,92,246,0.25) !important;
+  transform: translateY(-1px) !important;
+}
+@keyframes skipPulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(139,92,246,0.35), 0 0 40px rgba(139,92,246,0.15); }
+  50%       { box-shadow: 0 0 28px rgba(139,92,246,0.55), 0 0 60px rgba(139,92,246,0.30); }
+}
+
+/* ── Switch-view button (QR ↔ Email) ─────────────────────────────────────── */
+.share-switch-btn {
+  margin-top: 8px;
+  font-size: 0.9rem !important;
+  color: var(--text-muted) !important;
+  border-color: var(--glass-border) !important;
+  background: transparent !important;
+  padding: 8px 22px !important;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.share-switch-btn:hover {
+  color: var(--text-secondary) !important;
+  border-color: var(--glass-border-bright) !important;
+  background: var(--glass-sm) !important;
+}

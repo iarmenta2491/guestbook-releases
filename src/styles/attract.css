@@ -1,0 +1,263 @@
+/* attract.css */
+.attract-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.attract-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+.attract-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+.attract-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(7, 7, 26, 0.3) 0%,
+    rgba(7, 7, 26, 0.1) 40%,
+    rgba(7, 7, 26, 0.6) 80%,
+    rgba(7, 7, 26, 0.9) 100%
+  );
+  z-index: 1;
+}
+
+.attract-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 40px;
+  text-align: center;
+  width: 100%;
+  height: 100%;
+}
+
+.attract-logo-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: fadeIn 1.2s var(--ease-out) forwards;
+}
+
+.attract-event-name {
+  font-size: clamp(3.5rem, 8vw, 8rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #f1f5f9 0%, var(--purple-300) 40%, var(--teal-300) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  filter: drop-shadow(0 0 40px rgba(139,92,246,0.4));
+}
+
+.attract-subtitle {
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  font-weight: 300;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Topic prompt */
+.attract-prompt-area {
+  position: relative;
+  height: 60px;
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 1.5s var(--ease-out) 0.3s both;
+}
+
+.attract-prompt {
+  position: absolute;
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  font-weight: 400;
+  color: rgba(255,255,255,0.75);
+  text-align: center;
+  padding: 12px 32px;
+  background: var(--glass-sm);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(12px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90vw;
+  transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out);
+}
+
+.attract-prompt.visible { opacity: 1; transform: translateY(0); }
+.attract-prompt.hidden  { opacity: 0; transform: translateY(8px); }
+
+/* CTA Button */
+.attract-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: fadeIn 1.5s var(--ease-out) 0.5s both;
+}
+
+.attract-cta-btn {
+  padding: 28px 80px;
+  font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--purple-500), var(--purple-700));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  font-family: 'Outfit', sans-serif;
+  animation: glow 2.5s ease-in-out infinite;
+  transition: transform 0.15s var(--ease-spring), box-shadow 0.3s;
+  box-shadow: 0 0 40px rgba(139,92,246,0.5), 0 8px 32px rgba(0,0,0,0.4);
+}
+.attract-cta-btn:hover { transform: scale(1.04); }
+.attract-cta-btn:active { transform: scale(0.97); }
+
+.attract-tap-hint {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: pulse 3s ease-in-out infinite;
+}
+
+/* Particles */
+.attract-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  animation: particle-float linear infinite;
+}
+
+@keyframes particle-float {
+  0%   { opacity: 0; transform: translateY(100vh) scale(0); }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.3; }
+  100% { opacity: 0; transform: translateY(-20px) scale(1.2); }
+}
+
+/* Admin button */
+.attract-admin-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 3;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.35);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.8rem;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: opacity 0.3s, color 0.3s, border-color 0.3s;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.attract-admin-btn:hover {
+  opacity: 1;
+  color: rgba(255,255,255,0.7);
+  border-color: rgba(255,255,255,0.25);
+}
+
+/* Guest count */
+.attract-guest-count {
+  position: absolute;
+  bottom: 24px;
+  left: 32px;
+  z-index: 3;
+  color: rgba(255,255,255,0.3);
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attract-guest-count-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal-400);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* GLAM mode button */
+.attract-glam-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 16px 48px;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1rem, 2.5vw, 1.2rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, #f472b6 0%, #c026d3 50%, #7c3aed 100%);
+  background-size: 200% 200%;
+  border: none;
+  border-radius: 100px;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    0 4px 24px rgba(244,114,182,0.5),
+    0 0 0 2px rgba(244,114,182,0.2);
+  animation: glamShimmer 3s ease-in-out infinite, glamGlow 2s ease-in-out infinite;
+  position: relative;
+  z-index: 5;
+}
+.attract-glam-btn:active { transform: scale(0.95); }
+
+@keyframes glamShimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes glamGlow {
+  0%, 100% { box-shadow: 0 4px 24px rgba(244,114,182,0.5), 0 0 0 2px rgba(244,114,182,0.2); }
+  50%       { box-shadow: 0 8px 48px rgba(244,114,182,0.8), 0 0 0 4px rgba(192,38,211,0.35); }
+}
