@@ -27,8 +27,6 @@ export default function ShareScreen({ active }) {
   // 'idle' | 'qr' | 'email' | 'email-sending' | 'email-sent'
   const [view, setView] = useState('idle');
   const [qrUrl, setQrUrl] = useState(null);
-  const [publicUrl, setPublicUrl] = useState(null);   // ngrok public https URL
-  const [ngrokError, setNgrokError] = useState(null); // error string if tunnel fails
   const [qrError, setQrError] = useState(null);
   const [countdown, setCountdown] = useState(0);
   const [email, setEmail] = useState('');
@@ -91,8 +89,6 @@ export default function ShareScreen({ active }) {
       setView('idle');
       setQrUrl(null);
       setQrError(null);
-      setNgrokError(null);
-      setPublicUrl(null);
       setEmail('');
       setEmailError('');
       const secs = settings.decisionTimeout || 30;
@@ -113,8 +109,8 @@ export default function ShareScreen({ active }) {
     try {
       const result = await window.guestbook.startShareServer(session.savedClipPath);
 
-      // ── Strict URL construction via URL API (spaces → %20, no manual encoding) ──
-      const baseUrl  = result.publicUrl || result.localUrl || result.url || 'http://localhost:8765';
+      // Always use the local LAN URL — no tunnel upgrade
+      const baseUrl  = result.localUrl || result.url || 'http://localhost:8765';
       const fileName = session.savedClipPath
         ? session.savedClipPath.replace(/\\/g, '/').split('/').pop()
         : 'latest.mp4';
@@ -123,14 +119,8 @@ export default function ShareScreen({ active }) {
       safeUrl.searchParams.set('file', fileName);
       const qrTargetUrl = safeUrl.toString();
 
-      console.log('FORCE GENERATED QR URL:', qrTargetUrl);
-      console.log('[QR] base:     ', baseUrl);
-      console.log('[QR] filename: ', fileName);
-      console.log('[QR] publicUrl:', result.publicUrl);
-      console.log('[QR] localUrl: ', result.localUrl);
-
+      console.log('[QR] Local share URL:', qrTargetUrl);
       setQrUrl(qrTargetUrl);
-      setPublicUrl(result.publicUrl || null);
     } catch (err) {
       console.error('[QR] Share error:', err);
       setQrError('Could not start sharing server. Please try again.');
@@ -140,30 +130,6 @@ export default function ShareScreen({ active }) {
     }
   }, [session.savedClipPath, settings, goThankyou, startCountdown]);
 
-  // When ngrok connects in the background, upgrade the QR to the public https URL
-  useEffect(() => {
-    if (!window.guestbook?.onNgrokStatus) return;
-    const unsub = window.guestbook.onNgrokStatus((data) => {
-      console.log('[QR] ngrok-status received:', data);
-      if (data?.error) {
-        console.error('[NGROK ERROR on frontend]:', data.error);
-        setNgrokError(data.error);
-        return;
-      }
-      if (!data?.url) return;
-      setNgrokError(null);
-      const fileName = session.savedClipPath
-        ? session.savedClipPath.replace(/\\/g, '/').split('/').pop()
-        : 'latest.mp4';
-      const safeUrl = new URL('/download', data.url);
-      safeUrl.searchParams.set('file', fileName);
-      const upgradedUrl = safeUrl.toString();
-      console.log('[QR] Ngrok upgraded QR URL:', upgradedUrl);
-      setPublicUrl(data.url);
-      if (view === 'qr') setQrUrl(upgradedUrl);
-    });
-    return unsub;
-  }, [session.savedClipPath, view]);
 
   // Draw QR onto canvas once qrUrl is set and canvas is mounted.
   // Uses a rAF+retry loop to handle the async gap between state update
@@ -373,46 +339,27 @@ export default function ShareScreen({ active }) {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                 width: '100%', maxWidth: 320,
               }}>
-                {/* Tunnel status badge */}
+                {/* Wi-Fi instruction badge */}
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '4px 14px', borderRadius: 999,
-                  background: publicUrl ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)',
-                  border: `1px solid ${publicUrl ? 'rgba(34,197,94,0.4)' : 'rgba(234,179,8,0.4)'}`,
-                  color: publicUrl ? '#4ade80' : '#facc15',
-                  fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.04em',
+                  padding: '6px 16px', borderRadius: 999,
+                  background: 'rgba(20,184,166,0.12)',
+                  border: '1px solid rgba(20,184,166,0.35)',
+                  color: '#2dd4bf',
+                  fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.04em',
                 }}>
-                  {publicUrl ? '☁️ Cloud Tunnel Active' : '📶 Wi-Fi Only'}
+                  📶 Connect to the event Wi-Fi, then scan
                 </span>
 
-                {/* Ngrok error — shown in red if tunnel fails */}
-                {ngrokError && (
-                  <p style={{
-                    fontFamily: 'monospace', fontSize: '0.7rem',
-                    color: '#fca5a5', background: 'rgba(239,68,68,0.12)',
-                    border: '1px solid rgba(239,68,68,0.35)',
-                    borderRadius: 8, padding: '8px 12px',
-                    width: '100%', wordBreak: 'break-all',
-                    textAlign: 'left', lineHeight: 1.55,
-                  }}>
-                    ⚠️ Ngrok Error: {ngrokError}
-                  </p>
-                )}
-
-                {/* Exact URL — large, readable, copyable */}
+                {/* Exact URL — readable and copyable */}
                 <p style={{
-                  fontFamily: 'monospace',
-                  fontSize: '0.72rem',
+                  fontFamily: 'monospace', fontSize: '0.72rem',
                   color: '#e2e8f0',
                   background: 'rgba(0,0,0,0.45)',
                   border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 8,
-                  padding: '10px 14px',
-                  width: '100%',
-                  wordBreak: 'break-all',
-                  textAlign: 'center',
-                  userSelect: 'text',
-                  lineHeight: 1.6,
+                  borderRadius: 8, padding: '10px 14px',
+                  width: '100%', wordBreak: 'break-all',
+                  textAlign: 'center', userSelect: 'text', lineHeight: 1.6,
                 }}>
                   {qrUrl}
                 </p>

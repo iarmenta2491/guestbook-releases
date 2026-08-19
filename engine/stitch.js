@@ -342,67 +342,173 @@ async function stitchMultiple(segments, transitions, transitionDurations, tmpDir
     s.knownDuration != null ? Promise.resolve(Number(s.knownDuration)) : getDuration(s.path, ffmpegPath)
   ));
 
+  // ── xfade transition name map ──────────────────────────────────────────────
   const XFADE_MAP = {
     'crossfade':     'fade',
+    'fade':          'fade',
     'fade-to-black': 'fadeblack',
+    'fadeblack':     'fadeblack',
     'wipe':          'wipeleft',
+    'wipeleft':      'wipeleft',
+    'wiperight':     'wiperight',
+    'hard-cut':      null,
+    'cut':           null,
   };
 
   const getTransition = (i) => {
-    if (Array.isArray(transitions) && transitions[i]) return transitions[i];
-    return typeof transitions === 'string' ? transitions : 'crossfade';
+    let t;
+    if (Array.isArray(transitions) && transitions[i] != null && transitions[i] !== '') {
+      t = transitions[i];
+    } else if (typeof transitions === 'string' && transitions !== '') {
+      t = transitions;
+    } else {
+      t = 'crossfade';
+    }
+    return Object.prototype.hasOwnProperty.call(XFADE_MAP, t) ? t : 'crossfade';
   };
+
   const getTDur = (i) => {
     if (Array.isArray(transitionDurations) && transitionDurations[i] != null) return Number(transitionDurations[i]);
     return 1.0;
   };
 
-  const inputArgs   = [];
+  // ── Build input args ───────────────────────────────────────────────────────
+  const inputArgs = [];
   for (const s of segments) inputArgs.push('-i', s.path);
 
-  const filterParts = [];
+  // ── Timebase normalization prefix ─────────────────────────────────────────
+  //
+  // ROOT CAUSE OF CRASH: FFmpeg's concat filter outputs streams with timebase
+  // 1/1000000 (its internal clock), while raw MP4 inputs arrive with timebase
+  // 1/90000 (set by -video_track_timescale 90000 in normalizeClip).
+  //
+  // When a hard-cut (concat) result feeds into the next xfade as prevV, the
+  // two xfade inputs have different timebases → fatal:
+  //   "First input link main timebase (1/1000000) do not match the
+  //    corresponding second input link xfade timebase (1/90000)"
+  //
+  // Fix: Force ALL input streams to the same timebase (1/90000) BEFORE any
+  // filtering. Every filter node in the chain then operates on a uniform
+  // timebase, so concat→xfade and xfade→concat chains never mismatch.
+  //
+  // We also reset PTS to prevent discontinuities from slightly-off-zero starts.
+  //
+  const TB = `1/${TARGET_FPS * 3000}`;  // 1/90000 — matches the MP4 track timescale
+  const normPrefix = [];
+  for (let i = 0; i < n; i++) {
+    // Video: pin timebase and reset PTS
+    normPrefix.push(`[${i}:v]settb=expr=${TB},setpts=PTS-STARTPTS[nb${i}v]`);
+    // Audio: reset PTS (audio timebase is already consistent from normalizeClip)
+    normPrefix.push(`[${i}:a]asetpts=PTS-STARTPTS[nb${i}a]`);
+  }
+
+  // ── Build filter_complex using normalized labels ───────────────────────────
+  //
+  // WHY WE NORMALIZE BOTH INPUTS AND CONCAT OUTPUTS:
+  //
+  // 1. Raw input normalization (normPrefix above):
+  //    MP4 files from different recorders may have varying timebases.
+  //    settb=1/90000 on each [N:v] normalizes them all before use.
+  //
+  // 2. Concat OUTPUT normalization (in the loop below):
+  //    FFmpeg's concat FILTER unconditionally outputs at AV_TIME_BASE
+  //    (1/1000000), regardless of its inputs' timebases. This means
+  //    after every hard-cut (concat), the stream is back at 1/1000000.
+  //    The next xfade then receives mismatched timebases:
+  //       left:  concat output  → 1/1000000
+  //       right: [nbNv]         → 1/90000
+  //    → "First input link main timebase (1/1000000) do not match
+  //       the corresponding second input link xfade timebase (1/90000)"
+  //    Fix: pipe every non-final concat output through settb=1/90000
+  //    before handing it to the next filter.
+  //
+  // xfade DOES inherit the timebase from its first input, so xfade
+  // outputs stay at 1/90000 and do NOT need additional normalization.
+  //
+  const filterParts = [...normPrefix];
   let cumDur = durations[0];
-  let prevV  = '[0:v]';
-  let prevA  = '[0:a]';
+  let prevV  = `[nb0v]`;
+  let prevA  = `[nb0a]`;
 
   for (let i = 1; i < n; i++) {
     const tType  = getTransition(i - 1);
-    // Clamp transition to 90% of the shorter neighbouring segment
-    const tDur   = Math.min(getTDur(i - 1), durations[i - 1] * 0.9, durations[i] * 0.9);
-    const xfade  = XFADE_MAP[tType] ?? null;
+    const xfade  = XFADE_MAP[tType];
     const isLast = (i === n - 1);
-    const vOut   = isLast ? '[vout]' : `[v${i}]`;
-    const aOut   = isLast ? '[aout]' : `[a${i}]`;
 
-    if (xfade) {
+    // Clamp transition to 90% of shorter segment, and to at most 5s
+    const maxTDur = Math.min(durations[i - 1], durations[i]) * 0.9;
+    const tDur    = Math.min(getTDur(i - 1), maxTDur, 5.0);
+
+    const vOut = isLast ? '[vout]' : `[xv${i}]`;
+    const aOut = isLast ? '[aout]' : `[xa${i}]`;
+
+    if (xfade !== null) {
+      // ── xfade / acrossfade transition ──────────────────────────────────
+      // xfade inherits the first input's timebase, so the output remains
+      // at 1/90000 — no post-normalization needed here.
       const offset = Math.max(0, cumDur - tDur);
       filterParts.push(
-        `${prevV}[${i}:v]xfade=transition=${xfade}:duration=${tDur.toFixed(4)}:offset=${offset.toFixed(4)}${vOut}`
+        `${prevV}[nb${i}v]xfade=transition=${xfade}:duration=${tDur.toFixed(4)}:offset=${offset.toFixed(4)}${vOut}`
       );
       filterParts.push(
-        `${prevA}[${i}:a]acrossfade=d=${tDur.toFixed(4)}:c1=exp:c2=exp${aOut}`
+        `${prevA}[nb${i}a]acrossfade=d=${tDur.toFixed(4)}:c1=exp:c2=exp${aOut}`
       );
+      cumDur += durations[i] - tDur;
     } else {
-      // Hard-cut: concat BOTH video and audio into the same output labels
-      filterParts.push(
-        `${prevV}[${i}:v]concat=n=2:v=1:a=0${vOut}`,
-        `${prevA}[${i}:a]concat=n=2:v=0:a=1${aOut}`
-      );
+      // ── Hard-cut: concat BOTH video AND audio ──────────────────────────
+      // NEVER mix video-only concat with audio-only acrossfade.
+      //
+      // For non-final concat outputs: the concat filter produces 1/1000000.
+      // Pipe through settb=1/90000 so the next xfade sees matching timebases.
+      if (isLast) {
+        // Final output — feeds directly into the encoder, no re-normalization needed.
+        filterParts.push(`${prevV}[nb${i}v]concat=n=2:v=1:a=0${vOut}`);
+        filterParts.push(`${prevA}[nb${i}a]concat=n=2:v=0:a=1${aOut}`);
+      } else {
+        // Intermediate output — must renormalize before feeding the next filter.
+        filterParts.push(`${prevV}[nb${i}v]concat=n=2:v=1:a=0[cv${i}r]`);
+        filterParts.push(`[cv${i}r]settb=expr=${TB}${vOut}`);
+        // Audio: concat audio also outputs at 1/1000000; asetpts resets timestamps
+        // so acrossfade can compute fade duration correctly from the stream start.
+        filterParts.push(`${prevA}[nb${i}a]concat=n=2:v=0:a=1[ca${i}r]`);
+        filterParts.push(`[ca${i}r]asetpts=PTS-STARTPTS${aOut}`);
+      }
+      cumDur += durations[i];
     }
 
-    prevV   = vOut;
-    prevA   = aOut;
-    cumDur += durations[i] - tDur;
+    prevV = vOut;
+    prevA = aOut;
   }
+
+  // ── Safety guard: empty filterParts ───────────────────────────────────────
+  if (filterParts.length === 0) {
+    console.warn('[stitch] filterParts empty — falling back to simple concat');
+    const listFile = path.join(tmpDir, 'concat.txt');
+    fs.writeFileSync(listFile, segments.map(s => `file '${s.path.replace(/\\/g, '/')}'`).join('\n'));
+    await runFFmpeg(ffmpegPath, [
+      '-y', '-f', 'concat', '-safe', '0', '-i', listFile,
+      '-c:v', 'libx264', '-preset', preset.preset, '-crf', String(preset.crf),
+      '-profile:v', 'baseline', '-level', '3.1',
+      '-c:a', 'aac', '-ar', String(TARGET_AR), '-ac', '2', '-b:a', '192k',
+      '-pix_fmt', TARGET_PIXEL_FMT, '-movflags', '+faststart',
+      outputPath,
+    ], onProgress, 50, 85);
+    return outputPath;
+  }
+
+  const filterGraph = filterParts.join(';');
+  console.log('[stitch] filter_complex:\n', filterGraph);
 
   const args = [
     '-y', ...inputArgs,
-    '-filter_complex', filterParts.join(';'),
+    '-filter_complex', filterGraph,
     '-map', '[vout]', '-map', '[aout]',
     '-c:v', 'libx264', '-preset', preset.preset, '-crf', String(preset.crf),
     '-profile:v', 'baseline', '-level', '3.1',
     '-c:a', 'aac', '-ar', String(TARGET_AR), '-ac', '2', '-b:a', '192k',
     '-pix_fmt', TARGET_PIXEL_FMT,
+    '-r', String(TARGET_FPS),       // enforce CFR on output
+    '-vsync', 'cfr',                // constant frame rate — prevents pts jitter
     '-movflags', '+faststart',
     outputPath,
   ];
@@ -410,6 +516,8 @@ async function stitchMultiple(segments, transitions, transitionDurations, tmpDir
   await runFFmpeg(ffmpegPath, args, onProgress, 50, 85);
   return outputPath;
 }
+
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Background music mixing

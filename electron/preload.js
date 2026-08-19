@@ -33,12 +33,6 @@ contextBridge.exposeInMainWorld('guestbook', {
   // ── Sharing ───────────────────────────────────────────────────────────
   startShareServer: (clipPath) => ipcRenderer.invoke('start-share-server', { clipPath }),
   stopShareServer:  () => ipcRenderer.invoke('stop-share-server'),
-  getTunnelStatus:  () => ipcRenderer.invoke('get-tunnel-status'),
-  onNgrokStatus: (callback) => {
-    const handler = (_, data) => callback(data);
-    ipcRenderer.on('ngrok-status', handler);
-    return () => ipcRenderer.removeListener('ngrok-status', handler);
-  },
 
   // ── File System ───────────────────────────────────────────────────────
   openClipsFolder: () => ipcRenderer.invoke('open-clips-folder'),

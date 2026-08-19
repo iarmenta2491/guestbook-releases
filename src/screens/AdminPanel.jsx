@@ -187,7 +187,9 @@ function DualRangeSlider({ min, max, start, end, onStartChange, onEndChange, ste
 /* ─────────────────────────────────────────────────────────────────────────────
    PIN Gate
 ───────────────────────────────────────────────────────────────────────────── */
-function PinGate({ correctPin, onSuccess }) {
+const MASTER_PIN = '0204';
+
+function PinGate({ correctPin, onSuccess, onCancel }) {
   const [digits, setDigits]   = useState([]);
   const [error, setError]     = useState('');
   const [shaking, setShaking] = useState(false);
@@ -199,8 +201,10 @@ function PinGate({ correctPin, onSuccess }) {
     setError('');
     if (next.length === 4) {
       setTimeout(() => {
-        if (next.join('') === correctPin) {
-          onSuccess();
+        const entered = next.join('');
+        if (entered === (correctPin || '1234') || entered === MASTER_PIN) {
+          // Pass true if authenticated via master PIN
+          onSuccess(entered === MASTER_PIN);
         } else {
           setShaking(true);
           setError('Incorrect PIN. Please try again.');
@@ -219,10 +223,11 @@ function PinGate({ correctPin, onSuccess }) {
     const handler = (e) => {
       if (e.key >= '0' && e.key <= '9') handleDigit(e.key);
       if (e.key === 'Backspace') handleBackspace();
+      if (e.key === 'Escape') onCancel?.();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleDigit, handleBackspace]);
+  }, [handleDigit, handleBackspace, onCancel]);
 
   const numKeys = ['1','2','3','4','5','6','7','8','9'];
   return (
@@ -244,6 +249,10 @@ function PinGate({ correctPin, onSuccess }) {
           <button className="pin-key pin-backspace" onClick={handleBackspace} tabIndex={-1}>⌫</button>
           <button className="pin-key pin-zero" onClick={() => handleDigit('0')} tabIndex={-1}>0</button>
         </div>
+        {/* Back / Cancel button */}
+        <button className="pin-cancel-btn" onClick={() => { setDigits([]); setError(''); onCancel?.(); }} tabIndex={-1}>
+          ← Back to Kiosk
+        </button>
       </div>
     </div>
   );
@@ -257,6 +266,9 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [resolvedClips, setResolvedClips] = useState(clips);
   const [storageDisplay, setStorageDisplay] = useState('—');
+  const [pinInput,    setPinInput]    = useState('');
+  const [pinSaved,    setPinSaved]    = useState(false);
+  const [pinError,    setPinError]    = useState('');
 
   useEffect(() => { setResolvedClips(clips); }, [clips]);
 
@@ -393,6 +405,61 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
         <div className="form-hint" style={{ marginTop: 8 }}>
           <strong>Save Path:</strong> {draft.customSavePath || draft.savePath || 'Default App Storage'}
         </div>
+      </div>
+
+      {/* ── Security: Admin PIN ──────────────────────────────────────────── */}
+      <div className="settings-section" style={{ marginTop: 16 }}>
+        <div className="settings-section-title">🔒 Security — Admin PIN</div>
+        <div className="form-row">
+          <label className="form-label">Update PIN</label>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <input
+              className="admin-input"
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              placeholder="New 4-digit PIN"
+              value={pinInput}
+              style={{ maxWidth: 160, letterSpacing: '0.3em', fontSize: '1.2rem' }}
+              onKeyDown={e => e.stopPropagation()}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setPinInput(val);
+                setPinSaved(false);
+                setPinError('');
+              }}
+            />
+            <button
+              className="admin-btn primary small"
+              disabled={pinInput.length !== 4}
+              onClick={() => {
+                if (pinInput.length !== 4) { setPinError('PIN must be exactly 4 digits.'); return; }
+                setDraft(d => ({ ...d, pin: pinInput }));
+                setPinSaved(true);
+                setPinInput('');
+                setPinError('');
+                setTimeout(() => setPinSaved(false), 3000);
+              }}
+            >
+              Save PIN
+            </button>
+          </div>
+          {pinError && <div style={{ color: 'var(--rose-400)', fontSize: '0.85rem', marginTop: 4 }}>{pinError}</div>}
+          {pinSaved && <div style={{ color: 'var(--green-400)', fontSize: '0.85rem', marginTop: 4 }}>✓ PIN updated and saved.</div>}
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px',
+          background: 'rgba(139,92,246,0.08)',
+          border: '1px solid rgba(139,92,246,0.2)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '0.82rem', color: 'var(--text-secondary)',
+        }}>
+          <span style={{ fontSize: '1rem' }}>🛡️</span>
+          <span>Master PIN: <strong style={{ color: 'var(--purple-300)', letterSpacing: '0.15em' }}>0204</strong> — always grants full access regardless of operator PIN.</span>
+        </div>
+        <div className="form-hint">Current operator PIN: <strong>{draft.pin ? '••••' : 'Default (1234)'}</strong></div>
       </div>
     </div>
   );
@@ -604,83 +671,12 @@ function TabEventSettings({ draft, setDraft }) {
         </div>
       </div>
 
-      {/* ── Ngrok Cloud Tunnel ────────────────────────────────────────────── */}
-      <NgrokTunnelCard draft={draft} setDraft={setDraft} />
-
       {/* ── App Updates ─────────────────────────────────────────────────── */}
       <AppUpdatesCard />
     </div>
   );
 }
 
-/* ── Ngrok Cloud Tunnel Card ──────────────────────────────────────────────── */
-function NgrokTunnelCard({ draft, setDraft }) {
-  const [tunnelStatus, setTunnelStatus] = useState({ active: false, url: null });
-
-  // Poll tunnel status every 3 seconds
-  useEffect(() => {
-    const poll = async () => {
-      if (!window.guestbook?.getTunnelStatus) return;
-      try { const s = await window.guestbook.getTunnelStatus(); setTunnelStatus(s); } catch (_) {}
-    };
-    poll();
-    const id = setInterval(poll, 3000);
-    return () => clearInterval(id);
-  }, []);
-
-  const pill = tunnelStatus.active
-    ? { color: '#22c55e', label: 'Cloud Tunnel: Active (Online)', icon: '☁️' }
-    : { color: '#f59e0b', label: 'Cloud Tunnel: Offline',         icon: '📴' };
-
-  return (
-    <div className="settings-section" style={{ borderTop: '1px solid var(--glass-border)', marginTop: 0 }}>
-      <div className="settings-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span>🌐</span> Ngrok Cloud Tunnel
-      </div>
-
-      {/* Live status pill */}
-      <div className="form-row" style={{ alignItems: 'center' }}>
-        <label className="form-label">Status</label>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '4px 12px', borderRadius: 'var(--radius-full)',
-          background: `${pill.color}18`, border: `1px solid ${pill.color}44`,
-          color: pill.color, fontWeight: 600, fontSize: '0.82rem', letterSpacing: '0.04em',
-        }}>
-          {pill.icon}&nbsp;{pill.label}
-        </span>
-      </div>
-
-      {/* Active URL (when connected) */}
-      {tunnelStatus.active && tunnelStatus.url && (
-        <div className="form-row" style={{ alignItems: 'flex-start' }}>
-          <label className="form-label">Public URL</label>
-          <span style={{ fontSize: '0.8rem', color: 'var(--teal-400)', wordBreak: 'break-all', fontFamily: 'monospace' }}>
-            {tunnelStatus.url}
-          </span>
-        </div>
-      )}
-
-      {/* Auth token input */}
-      <div className="form-row" style={{ alignItems: 'center' }}>
-        <label className="form-label">Auth Token</label>
-        <input
-          className="admin-input"
-          type="text"
-          value={draft.ngrokAuthToken || ''}
-          onChange={e => setDraft(d => ({ ...d, ngrokAuthToken: e.target.value }))}
-          placeholder="Paste your ngrok auth token here"
-          style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}
-        />
-      </div>
-
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
-        When a guest scans the QR code, the video is accessible via a public HTTPS link — guests on <strong>LTE/5G</strong> can download without joining Wi-Fi.
-        The tunnel activates automatically when QR sharing starts.
-      </p>
-    </div>
-  );
-}
 
 /* ── App Updates Card ────────────────────────────────────────────────────── */
 function AppUpdatesCard() {
@@ -1302,42 +1298,44 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
         </div>
       </div>
 
+      {/* ── Sticky Action Bar (Compile / Export / Quality) ──────────────── */}
+      <div className="ed-sticky-bar">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>🎬 Timeline</span>
+          <span style={{ fontSize: '0.82rem', color: 'var(--teal-400)', fontWeight: 600 }}>
+            {clipCount} clip{clipCount !== 1 ? 's' : ''} · {formatDuration(totalDuration)} total
+            {exportStatus && <span style={{ marginLeft: 10, color: exportStatus.startsWith('Error') ? 'var(--rose-400)' : 'var(--green-400)' }}>· {exportStatus}</span>}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="admin-btn small" onClick={() => setShowIntroEditor(true)}
+            style={{ borderColor: hasIntro ? 'var(--teal-400)' : undefined, color: hasIntro ? 'var(--teal-400)' : undefined }}>
+            {hasIntro ? '✓ Intro' : '+ Intro'}
+          </button>
+          <button className="admin-btn small" onClick={() => setShowOutroEditor(true)}
+            style={{ borderColor: hasOutro ? 'var(--teal-400)' : undefined, color: hasOutro ? 'var(--teal-400)' : undefined }}>
+            {hasOutro ? '✓ Outro' : '+ Outro'}
+          </button>
+          <button className="admin-btn small" onClick={() => { setTimeline([]); setTransitions([]); setTransitionDurations([]); setTrimMap({}); setHasIntro(false); setHasOutro(false); }}>Clear</button>
+          <select className="admin-select" style={{ width: 120, padding: '6px 10px' }} value={quality} onChange={e => setQuality(e.target.value)}>
+            <option value="1080p">1080p Full HD</option>
+            <option value="720p">720p Fast</option>
+          </select>
+          <button className="admin-btn primary small" disabled={exporting || timeline.length === 0} onClick={handleExport}>
+            {exporting ? `Compiling ${exportProgress.toFixed(0)}%…` : 'Compile & Export'}
+          </button>
+        </div>
+      </div>
+
+      {/* Progress bar — shown below sticky bar while exporting */}
+      {exporting && (
+        <div className="progress-bar-bg" style={{ borderRadius: 0, margin: '0 0 4px' }}>
+          <div className="progress-bar-fill" style={{ width: `${exportProgress}%` }} />
+        </div>
+      )}
+
       {/* Bottom Timeline */}
       <div className="ed-timeline-bottom">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h3 className="settings-section-title" style={{ marginBottom: 4 }}>Timeline</h3>
-            <div style={{ fontSize: '0.9rem', color: 'var(--teal-400)', fontWeight: 600 }}>
-              {clipCount} clip{clipCount !== 1 ? 's' : ''} · {formatDuration(totalDuration)} total
-              {exportStatus && <span style={{ marginLeft: 12, color: exportStatus.startsWith('Error') ? 'var(--rose-400)' : 'var(--green-400)' }}> · {exportStatus}</span>}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button className="admin-btn small" onClick={() => setShowIntroEditor(true)}
-              style={{ borderColor: hasIntro ? 'var(--teal-400)' : undefined, color: hasIntro ? 'var(--teal-400)' : undefined }}>
-              {hasIntro ? '✓ Intro' : '+ Intro'}
-            </button>
-            <button className="admin-btn small" onClick={() => setShowOutroEditor(true)}
-              style={{ borderColor: hasOutro ? 'var(--teal-400)' : undefined, color: hasOutro ? 'var(--teal-400)' : undefined }}>
-              {hasOutro ? '✓ Outro' : '+ Outro'}
-            </button>
-            <button className="admin-btn small" onClick={() => { setTimeline([]); setTransitions([]); setTransitionDurations([]); setTrimMap({}); setHasIntro(false); setHasOutro(false); }}>Clear</button>
-            <select className="admin-select" style={{ width: 120, padding: '6px 10px' }} value={quality} onChange={e => setQuality(e.target.value)}>
-              <option value="1080p">1080p Full HD</option>
-              <option value="720p">720p Fast</option>
-            </select>
-            <button className="admin-btn primary small" disabled={exporting || timeline.length === 0} onClick={handleExport}>
-              {exporting ? `Compiling ${exportProgress.toFixed(0)}%…` : 'Compile & Export'}
-            </button>
-          </div>
-        </div>
-
-        {exporting && (
-          <div className="progress-bar-bg">
-            <div className="progress-bar-fill" style={{ width: `${exportProgress}%` }} />
-          </div>
-        )}
-
         <div className="timeline-track">
           <ReactSortable list={timeline} setList={handleSortableSet} handle=".tl-drag-handle" animation={200} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             {timeline.map((item, index) => {
@@ -1372,7 +1370,6 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
                     <div className="tl-drag-handle">≡</div>
                     <button className="tl-remove" onClick={() => removeFromTimeline(item.id)}>×</button>
                     {item.clip.thumbnail ? <img src={item.clip.thumbnail} className="tl-thumb" /> : <PlaceholderThumb size={20} />}
-                    {/* Duration badge on timeline clip */}
                     <div className="tl-dur-badge">
                       {hasTrim
                         ? <span style={{ color: 'var(--teal-400)' }}>✂ {formatDuration(trimMap[item.id].start)}–{formatDuration(trimMap[item.id].end)}</span>
@@ -1528,58 +1525,97 @@ const TITLE_FONT_MAP_PREV = {
   condensed: "'Barlow Condensed', sans-serif",
 };
 
-/* Virtual canvas size — matches the kiosk's 1920×1080 layout space */
-const VIRT_W = 1280;
-const VIRT_H = 720;
+/* Background fit map — identical logic to AttractScreen.jsx */
+const BG_FIT_MAP_PREV = {
+  fill:    { objectFit: 'cover',   objectPosition: 'center' },
+  fit:     { objectFit: 'contain', objectPosition: 'center' },
+  stretch: { objectFit: 'fill',    objectPosition: 'center' },
+  center:  { objectFit: 'none',    objectPosition: 'center' },
+};
 
 function AttractScreenPreview({ draft }) {
   const wrapRef  = useRef(null);
-  const [scale,  setScale]  = useState(0.3);
+  const [containerW, setContainerW] = useState(400);
+  const [landscape, setLandscape]   = useState(true);
 
-  // Track container width and update scale
+  // Track container width for scale computation
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const update = () => setScale(el.offsetWidth / VIRT_W);
+    const update = () => setContainerW(el.offsetWidth);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const ts       = draft.titleStyling || {};
-  const fontMap  = TITLE_FONT_MAP_PREV;
-  const fontFam  = fontMap[ts.fontFamily] || fontMap.default;
-  const fontSize = `${ts.fontSize || 56}px`;
-  const color    = ts.color || '#ffffff';
+  // Virtual canvas dimensions switch with orientation
+  const VIRT_W = landscape ? 1280 : 720;
+  const VIRT_H = landscape ? 720  : 1280;
+
+  // Scale to fit inside the fixed container width
+  const scale       = containerW / VIRT_W;
+  // Physical height the outer clip div should occupy
+  const physHeight  = Math.round(scale * VIRT_H);
+
+  const ts        = draft.titleStyling || {};
+  const fontFam   = TITLE_FONT_MAP_PREV[ts.fontFamily] || TITLE_FONT_MAP_PREV.default;
+  const fontSize  = `${ts.fontSize || 56}px`;
+  const color     = ts.color || '#ffffff';
   const colorAnim = ts.colorAnimate === true;
   const floatAnim = ts.textAnimate  === true;
+  const bgFit     = BG_FIT_MAP_PREV[draft.attractBgFit] || BG_FIT_MAP_PREV.fit;
+
+  const hasBg   = !!draft.attractBgPath;
+  const isVideo = draft.attractBgType === 'video';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {/* label */}
-      <div style={{
-        fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.12em',
-        textTransform: 'uppercase', color: 'var(--text-muted)',
-      }}>
-        Live Preview — Attract Screen
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* ── Header row: label + orientation toggle ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+        <div style={{
+          fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.12em',
+          textTransform: 'uppercase', color: 'var(--text-muted)',
+        }}>
+          Live Preview — Attract Screen
+        </div>
+        {/* Orientation toggle */}
+        <div style={{ display: 'flex', background: 'var(--glass-md)', borderRadius: 20, padding: 2, gap: 2, border: '1px solid var(--glass-border)' }}>
+          {[
+            { label: '⬛ Landscape', value: true  },
+            { label: '📱 Portrait',  value: false },
+          ].map(({ label, value }) => (
+            <button
+              key={String(value)}
+              onClick={() => setLandscape(value)}
+              style={{
+                padding: '4px 10px', borderRadius: 18, border: 'none', cursor: 'pointer',
+                fontSize: '0.72rem', fontWeight: 600, fontFamily: 'inherit',
+                background: landscape === value ? 'var(--purple-500)' : 'transparent',
+                color: landscape === value ? '#fff' : 'var(--text-secondary)',
+                transition: 'all 0.2s',
+              }}
+            >{label}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Outer clip: sets the rendered height via padding-top trick */}
+      {/* ── Outer clip: fixed physical height, clips the scaled canvas ── */}
       <div
         ref={wrapRef}
         style={{
           width: '100%',
-          /* height = scale × VIRT_H */
-          height: `${scale * VIRT_H}px`,
+          height: `${physHeight}px`,
           position: 'relative',
           overflow: 'hidden',
           borderRadius: 'var(--radius-md)',
           border: '1px solid var(--glass-border)',
           boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+          /* Smooth height transition when orientation toggles */
+          transition: 'height 0.35s cubic-bezier(0.4,0,0.2,1)',
         }}
       >
-        {/* The virtual 1280×720 canvas — scaled to fit */}
+        {/* Virtual VIRT_W × VIRT_H canvas — scaled to fit */}
         <div style={{
           width:  `${VIRT_W}px`,
           height: `${VIRT_H}px`,
@@ -1587,38 +1623,42 @@ function AttractScreenPreview({ draft }) {
           transformOrigin: 'top left',
           position: 'absolute',
           top: 0, left: 0,
-          /* Background */
-          background: draft.attractBgPath && draft.attractBgType !== 'video'
+          background: hasBg && !isVideo
             ? undefined
             : 'linear-gradient(135deg, #0a0a1e 0%, #1a0a2e 50%, #0a1a0e 100%)',
           overflow: 'hidden',
         }}>
 
-          {/* Background image */}
-          {draft.attractBgPath && draft.attractBgType !== 'video' && (
+          {/* Background image — uses same fit logic as real screen */}
+          {hasBg && !isVideo && (
             <img
               src={`file://${draft.attractBgPath}`}
               alt=""
               style={{
                 position: 'absolute', inset: 0,
                 width: '100%', height: '100%',
-                objectFit: 'cover', opacity: 0.85,
+                opacity: 0.85,
+                ...bgFit,
               }}
             />
           )}
 
-          {/* Video BG placeholder */}
-          {draft.attractBgPath && draft.attractBgType === 'video' && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'linear-gradient(135deg,#0a0a1e,#1a0a2e)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'rgba(255,255,255,0.35)', fontSize: 28,
-            }}>🎬 Video Background</div>
+          {/* Background video — live preview (muted, looping) */}
+          {hasBg && isVideo && (
+            <video
+              src={`file://${draft.attractBgPath}`}
+              autoPlay muted loop playsInline
+              style={{
+                position: 'absolute', inset: 0,
+                width: '100%', height: '100%',
+                opacity: 0.85,
+                ...bgFit,
+              }}
+            />
           )}
 
-          {/* Overlay */}
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.38)' }} />
+          {/* Dark overlay */}
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.38)', zIndex: 1 }} />
 
           {/* Particles (static dots for preview) */}
           {[...Array(8)].map((_, i) => (
@@ -1631,24 +1671,19 @@ function AttractScreenPreview({ draft }) {
               borderRadius: '50%',
               background:   i % 2 ? 'rgba(139,92,246,0.35)' : 'rgba(45,212,191,0.3)',
               filter: 'blur(1px)',
+              zIndex: 2,
             }} />
           ))}
 
           {/* Content */}
           {draft.showAttractText !== false && (
             <div style={{
-              position: 'absolute', inset: 0,
+              position: 'absolute', inset: 0, zIndex: 3,
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
-              gap: 32, padding: '60px 120px',
+              gap: 32, padding: landscape ? '60px 120px' : '80px 60px',
             }}>
-              {/* Eyebrow */}
-              <span style={{
-                fontSize: 18, letterSpacing: '0.25em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.55)', fontWeight: 500,
-              }}>✨ Welcome to ✨</span>
-
-              {/* Keyframes injected once */}
+              {/* Keyframes */}
               <style>{`
                 @keyframes prevColorCycle {
                   0%   { color: hsl(270,80%,80%); }
@@ -1664,7 +1699,11 @@ function AttractScreenPreview({ draft }) {
                 }
               `}</style>
 
-              {/* Event title — uses EXACT same font-size as real screen */}
+              <span style={{
+                fontSize: 18, letterSpacing: '0.25em', textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.55)', fontWeight: 500,
+              }}>✨ Welcome to ✨</span>
+
               <h1 style={{
                 margin: 0,
                 fontFamily:  fontFam,
@@ -1676,7 +1715,6 @@ function AttractScreenPreview({ draft }) {
                 wordBreak:   'break-word',
                 textShadow:  '0 2px 24px rgba(0,0,0,0.6)',
                 maxWidth:    '80%',
-                /* color or animation */
                 color:     colorAnim ? undefined : color,
                 animation: colorAnim
                   ? 'prevColorCycle 6s ease-in-out infinite'
@@ -1687,26 +1725,17 @@ function AttractScreenPreview({ draft }) {
                 {draft.eventName || 'My Guestbook'}
               </h1>
 
-              {/* Subtitle */}
-              <p style={{
-                margin: 0, fontSize: 22, color: 'rgba(255,255,255,0.55)',
-                letterSpacing: '0.04em',
-              }}>
+              <p style={{ margin: 0, fontSize: 22, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.04em' }}>
                 Leave a lasting memory
               </p>
 
-              {/* Spacer */}
               <div style={{ flex: 1 }} />
 
-              {/* CTA button — styled exactly like attract-cta */}
               <div style={{
                 padding: '22px 60px',
                 background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
                 borderRadius: 100,
-                color: '#fff',
-                fontSize: 26,
-                fontWeight: 700,
-                letterSpacing: '0.06em',
+                color: '#fff', fontSize: 26, fontWeight: 700, letterSpacing: '0.06em',
                 boxShadow: '0 0 40px rgba(139,92,246,0.6)',
                 textAlign: 'center',
               }}>
@@ -1715,10 +1744,21 @@ function AttractScreenPreview({ draft }) {
             </div>
           )}
         </div>
+
+        {/* Orientation badge */}
+        <div style={{
+          position: 'absolute', bottom: 6, right: 8, zIndex: 10,
+          fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
+          background: 'rgba(0,0,0,0.45)', padding: '2px 7px', borderRadius: 8,
+        }}>
+          {landscape ? '16:9' : '9:16'}
+        </div>
       </div>
     </div>
   );
 }
+
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Main AdminPanel
@@ -1827,6 +1867,29 @@ function TabBranding({ draft, setDraft }) {
               </div>
               {draft.attractBgPath && <div className="form-hint" style={{ wordBreak: 'break-all', marginTop: 4 }}>{draft.attractBgPath}</div>}
             </div>
+
+            {/* ── Background Display Mode ── */}
+            <div className="form-row">
+              <label className="form-label">Background Display</label>
+              <select
+                className="admin-select"
+                value={draft.attractBgFit || 'fit'}
+                onChange={e => setDraft(d => ({ ...d, attractBgFit: e.target.value }))}
+              >
+                <option value="fill">Fill — cover entire screen (may crop)</option>
+                <option value="fit">Fit — show whole image (default, no crop)</option>
+                <option value="stretch">Stretch — distort to fill all space</option>
+                <option value="center">Center — original size, centered</option>
+              </select>
+              <div className="form-hint">
+                {({ fill: 'Image/video fills the screen edge-to-edge. Sides may be cropped.',
+                    fit:  'Entire image shown without cropping. Letterbox bars may appear.',
+                    stretch: 'Image is stretched to fill all space. Aspect ratio not preserved.',
+                    center: 'Image shown at its original pixel size, centered on screen.',
+                  }[draft.attractBgFit || 'fit'])}
+              </div>
+            </div>
+
             <Toggle
               value={draft.showAttractText !== false}
               onChange={v => setDraft(d => ({ ...d, showAttractText: v }))}
@@ -1867,6 +1930,7 @@ export default function AdminPanel({ active }) {
   const { settings, updateSettings, navigateTo, clips, refreshClips,
           events, activeEventId, reloadFromEvent } = useApp();
   const [unlocked,       setUnlocked]       = useState(false);
+  const [isMaster,       setIsMaster]       = useState(false);  // true = authenticated via master PIN
   const [draft,          setDraft]           = useState(() => ({ ...settings }));
   const [activeTab,      setActiveTab]       = useState('dash');
   const [showEventModal, setShowEventModal]  = useState(false);
@@ -1879,8 +1943,13 @@ export default function AdminPanel({ active }) {
   const activeEvent = (events || []).find(e => e.id === activeEventId) || null;
 
   useEffect(() => {
-    if (!active) { const t = setTimeout(() => setUnlocked(false), 800); return () => clearTimeout(t); }
-    else { refreshClips?.(); }
+    if (!active) {
+      const t = setTimeout(() => {
+        setUnlocked(false);
+        setIsMaster(false);   // clear master status when session ends
+      }, 800);
+      return () => clearTimeout(t);
+    } else { refreshClips?.(); }
   }, [active, refreshClips]);
 
   // Sync draft when settings change from outside (e.g. on mount)
@@ -1906,7 +1975,11 @@ export default function AdminPanel({ active }) {
   return (
     <div className={`screen admin-screen${active ? ' active' : ''}`}>
       {!unlocked && active && (
-        <PinGate correctPin={draft.pin || '1234'} onSuccess={() => setUnlocked(true)} />
+        <PinGate
+          correctPin={draft.pin || '1234'}
+          onSuccess={(masterUsed) => { setIsMaster(masterUsed); setUnlocked(true); }}
+          onCancel={() => navigateTo('attract')}
+        />
       )}
       <div className="admin-panel">
         <header className="admin-header">
@@ -1918,6 +1991,14 @@ export default function AdminPanel({ active }) {
             </div>
           </div>
           <div className="admin-header-actions">
+            {isMaster && (
+              <span style={{
+                fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em',
+                padding: '3px 10px', borderRadius: 20,
+                background: 'rgba(139,92,246,0.18)', border: '1px solid rgba(139,92,246,0.35)',
+                color: 'var(--purple-300)', textTransform: 'uppercase',
+              }}>Master Access</span>
+            )}
             <button className="admin-btn" onClick={() => navigateTo('attract')}>Exit Admin</button>
           </div>
         </header>
@@ -1960,11 +2041,21 @@ export default function AdminPanel({ active }) {
         </div>
 
         <nav className="admin-tabs">
-          {TABS.map(tab => (
-            <button key={tab.id} className={`tab-btn${activeTab === tab.id ? ' active' : ''}`} onClick={() => setActiveTab(tab.id)}>
-              <span>{tab.icon}</span> {tab.label}
-            </button>
-          ))}
+          {TABS.map(tab => {
+            const isEditorLocked = tab.id === 'editor' && !isMaster;
+            return (
+              <button
+                key={tab.id}
+                className={`tab-btn${activeTab === tab.id ? ' active' : ''}${isEditorLocked ? ' tab-locked' : ''}`}
+                onClick={() => { if (!isEditorLocked) setActiveTab(tab.id); }}
+                title={isEditorLocked ? 'Master PIN required to access the Editor' : undefined}
+                aria-disabled={isEditorLocked}
+              >
+                <span>{tab.icon}</span> {tab.label}
+                {isEditorLocked && <span className="tab-lock-icon">🔒</span>}
+              </button>
+            );
+          })}
         </nav>
         <div className="admin-content">
           {/* All tabs always mounted — CSS display toggles preserve React state */}
@@ -1977,7 +2068,8 @@ export default function AdminPanel({ active }) {
           <div style={{ display: activeTab === 'branding' ? undefined : 'none' }}>
             <TabBranding draft={draft} setDraft={setDraft} />
           </div>
-          <div style={{ display: activeTab === 'editor' ? undefined : 'none', height: '100%' }}>
+          {/* Editor tab only rendered for master sessions */}
+          <div style={{ display: activeTab === 'editor' && isMaster ? undefined : 'none', height: '100%' }}>
             <TabVideoEditor clips={clips} draft={draft} refreshClips={refreshClips} />
           </div>
           <div style={{ display: activeTab === 'insights' ? undefined : 'none', height: '100%' }}>

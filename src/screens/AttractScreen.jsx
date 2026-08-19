@@ -124,6 +124,15 @@ export default function AttractScreen({ active }) {
   const isVideo = settings.attractBgType === 'video';
   const bgSrc   = settings.attractBgPath || '/attract_bg.png';
 
+  // Map the user's Display setting to CSS object-fit + object-position
+  const BG_FIT_MAP = {
+    fill:    { objectFit: 'cover',    objectPosition: 'center' },
+    fit:     { objectFit: 'contain',  objectPosition: 'center' },
+    stretch: { objectFit: 'fill',     objectPosition: 'center' },
+    center:  { objectFit: 'none',     objectPosition: 'center' },
+  };
+  const bgFitStyle = BG_FIT_MAP[settings.attractBgFit] || BG_FIT_MAP.fit;
+
   return (
     <>
       <style>{`
@@ -153,7 +162,7 @@ export default function AttractScreen({ active }) {
           inset: 0;
           width: 100%;
           height: 100%;
-          object-fit: cover;
+          /* object-fit is set via inline style from settings.attractBgFit */
           z-index: 0;
         }
         .attract-bg-fallback {
@@ -471,6 +480,7 @@ export default function AttractScreen({ active }) {
               muted
               playsInline
               onError={() => setBgError(true)}
+              style={bgFitStyle}
             />
           ) : (
             <img
@@ -478,6 +488,7 @@ export default function AttractScreen({ active }) {
               src={bgSrc}
               alt=""
               onError={() => setBgError(true)}
+              style={bgFitStyle}
             />
           )
         ) : (

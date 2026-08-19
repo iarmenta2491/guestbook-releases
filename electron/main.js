@@ -26,7 +26,7 @@ let store;
 let mainWindow      = null;
 let localServer     = null;
 let localServerPort = null;
-let ngrokTunnelUrl  = null;   // public https URL when ngrok tunnel is active
+// (ngrok removed — sharing is LAN-only)
 let EVENTS_ROOT;              // resolved after app.getPath('documents') is available
 
 // ── Auto-updater state (broadcast to renderer) ────────────────────────────
@@ -94,7 +94,6 @@ const DEFAULT_SETTINGS = {
   enableSentiment: true,
   defaultTransition: 'crossfade',
   enableGlam: false,
-  ngrokAuthToken: '3HzCxC5BibEFN6wDGZnEOCamRdS_4ojBynEuAp27vJns6dovk',
   promptStyling: {
     color:           '#ffffff',
     rainbowAnimation: false,
@@ -327,7 +326,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') { stopLocalServer(); stopNgrokTunnel(); app.quit(); }
+  if (process.platform !== 'darwin') { stopLocalServer(); app.quit(); }
 });
 
 // ── Window ─────────────────────────────────────────────────────────────────
@@ -775,8 +774,6 @@ ipcMain.handle('start-share-server', async (_, { clipPath }) => {
   localServer = http.createServer((req, res) => {
     const url = req.url.split('?')[0];
 
-    // ── Global: bypass ngrok free-tier browser warning on every response ───
-    res.setHeader('ngrok-skip-browser-warning', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
     // ── /video — stream the MP4 clip ─────────────────────────────────────
@@ -1017,68 +1014,11 @@ ipcMain.handle('start-share-server', async (_, { clipPath }) => {
   });
   localServerPort = port;
 
-  // Start ngrok tunnel in parallel — non-blocking for the local QR to work immediately
-  const localUrl  = `http://${localIP}:${port}`;
-  const authToken = store?.get('ngrokAuthToken') || '3HzCxC5BibEFN6wDGZnEOCamRdS_4ojBynEuAp27vJns6dovk';
-
-  // Start ngrok in the BACKGROUND — don't block the IPC response.
-  // When the tunnel connects, we push 'ngrok-status' to the renderer
-  // so it can upgrade the QR code URL without a second round-trip.
-  startNgrokTunnel(port, authToken); // intentionally not awaited
-
+  const localUrl = `http://${localIP}:${port}`;
   return { ok: true, url: localUrl, localUrl, publicUrl: null };
 });
 
-ipcMain.handle('stop-share-server', () => { stopLocalServer(); stopNgrokTunnel(); return { ok: true }; });
-
-// ── Ngrok helpers ────────────────────────────────────────────────────────────
-async function startNgrokTunnel(port, authToken) {
-  const ngrok = require('ngrok');
-
-  // Forcefully kill any ghost ngrok processes from previous sessions
-  try {
-    await ngrok.kill();
-    await ngrok.disconnect();
-    console.log('[NGROK] Ghost cleanup complete.');
-  } catch (cleanupErr) {
-    console.log('[NGROK] Cleanup skipped or no ghost found:', cleanupErr.message);
-  }
-
-  try {
-    const token = authToken || '3HzCxC5BibEFN6wDGZnEOCamRdS_4ojBynEuAp27vJns6dovk';
-    console.log('[NGROK] Starting connect on port:', port,
-      'with token:', token ? token.substring(0, 8) + '...' : 'NONE');
-    ngrokTunnelUrl = await ngrok.connect({ addr: port, authtoken: token });
-    console.log('[NGROK] Tunnel established successfully:', ngrokTunnelUrl);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ngrok-status', { active: true, url: ngrokTunnelUrl, error: null });
-    }
-    return ngrokTunnelUrl;
-  } catch (err) {
-    console.error('[NGROK ERROR FULL]:', err);
-    ngrokTunnelUrl = null;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ngrok-status', { active: false, url: null, error: err.message || String(err) });
-    }
-    return null;
-  }
-}
-
-async function stopNgrokTunnel() {
-  if (!ngrokTunnelUrl) return;
-  try {
-    const ngrok = require('ngrok');
-    await ngrok.kill();
-    console.log('[Ngrok] Tunnel disconnected.');
-  } catch (_) {}
-  ngrokTunnelUrl = null;
-}
-
-// Report live tunnel status to the renderer (Settings tab)
-ipcMain.handle('get-tunnel-status', () => ({
-  active: !!ngrokTunnelUrl,
-  url:    ngrokTunnelUrl || null,
-}));
+ipcMain.handle('stop-share-server', () => { stopLocalServer(); return { ok: true }; });
 
 
 // Track open sockets so stopLocalServer can destroy them immediately
