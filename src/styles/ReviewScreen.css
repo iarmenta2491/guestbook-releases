@@ -126,10 +126,11 @@
 /* ── VIDEO: embedded player card ──────────────────────────────────────────── */
 .review-video-card {
   position: relative;
-  /* Width/height are set by JS inline style based on video + device orientation.
-     These are the visual-only defaults before JS has detected the video dimensions. */
+  /* Always 16:9 — the webcam always records landscape.
+     Full width of whatever space the media area provides. */
   width: 100%;
-  height: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
   background: #000;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -141,6 +142,8 @@
 .review-video {
   width: 100%;
   height: 100%;
+  /* contain: shows the full video, no zoom, no crop.
+     Black bars appear if video and container ratios differ. */
   object-fit: contain;
   display: block;
   border-radius: var(--radius-lg);
