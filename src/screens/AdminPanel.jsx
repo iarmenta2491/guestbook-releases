@@ -703,7 +703,8 @@ function TabEventSettings({ draft, setDraft }) {
                 >
                   <option value="letterbox">Letterbox (Contain) — full frame, black bars</option>
                   <option value="centercrop">Center Crop (Cover) — fills vertical space</option>
-                  <option value="rotate90">Rotate 90° — camera mounted sideways</option>
+                  <option value="rotate90cw">Rotate 90° Clockwise — camera mounted sideways (CW)</option>
+                  <option value="rotate90ccw">Rotate 90° Counter-Clockwise — camera mounted sideways (CCW)</option>
                 </select>
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0 4px 0', lineHeight: 1.5 }}>
@@ -711,8 +712,10 @@ function TabEventSettings({ draft, setDraft }) {
                   'Shows the full video with black bars. Best choice for laptop webcams — nothing is cropped.'}
                 {draft.cameraMismatch === 'centercrop' &&
                   'Zooms to fill the portrait space. Left/right edges of the landscape feed are cropped.'}
-                {draft.cameraMismatch === 'rotate90' &&
-                  'Rotates the feed 90°. Use when the physical camera is mounted on its side.'}
+                {draft.cameraMismatch === 'rotate90cw' &&
+                  'Rotates the feed 90° clockwise. Use when the physical camera top is pointing to the right.'}
+                {draft.cameraMismatch === 'rotate90ccw' &&
+                  'Rotates the feed 90° counter-clockwise. Use when the physical camera top is pointing to the left.'}
               </div>
             </>
           )}

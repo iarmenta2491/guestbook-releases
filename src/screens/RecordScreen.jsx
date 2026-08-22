@@ -72,8 +72,9 @@ export default function RecordScreen({ active, glamMode = false }) {
         videoConstraints = { deviceId: { exact: selectedCamera } };
       } else {
         // Request dimensions matching the effective orientation.
-        // rotate90 uses landscape constraints (camera is sideways, not rotated in hardware).
-        const wantPortrait = isPortrait && mismatch !== 'rotate90';
+        // Sideways cameras (rotate90cw/ccw) use landscape constraints — the
+        // canvas pipeline handles the rotation, not the hardware constraints.
+        const wantPortrait = isPortrait && mismatch !== 'rotate90cw' && mismatch !== 'rotate90ccw';
         videoConstraints = wantPortrait
           ? { width: { ideal: 720  }, height: { ideal: 1280 }, facingMode: 'user' }
           : { width: { ideal: 1280 }, height: { ideal: 720  }, facingMode: 'user' };
@@ -131,17 +132,22 @@ export default function RecordScreen({ active, glamMode = false }) {
   }, []);
 
   /* ── Rotate-90 canvas pipeline ─────────────────────────────────────────── */
-  // Draws each frame onto a portrait-shaped canvas with a -90° rotation so
+  // Draws each frame onto a portrait-shaped canvas with a ±90° rotation so
   // the saved video file is physically upright — no CSS trick, no metadata flag.
   //
   // Canvas dimensions: swapped from the raw stream (720 × 1280 for a 1280×720 cam).
   // Draw sequence per frame:
-  //   1. Translate to canvas centre
-  //   2. Rotate -π/2 (-90°) — corrects a clockwise-mounted sideways camera
-  //   3. drawImage centred at origin — no mirroring, exactly as camera sees it
+  //   1. Translate to canvas centre  (canvas.width/2, canvas.height/2)
+  //   2. Rotate by angle:
+  //        rotate90cw  → +Math.PI/2  (camera top points RIGHT)
+  //        rotate90ccw → -Math.PI/2  (camera top points LEFT)
+  //   3. drawImage centred at origin (-vw/2, -vh/2, vw, vh) — no mirroring
   const rotateCanvasRef = useRef(null);
 
-  const startRotateCanvas = useCallback((rawStream) => {
+  const startRotateCanvas = useCallback((rawStream, direction) => {
+    // +Math.PI/2 for clockwise, -Math.PI/2 for counter-clockwise
+    const angle = direction === 'rotate90cw' ? Math.PI / 2 : -Math.PI / 2;
+
     const canvas = document.createElement('canvas');
     rotateCanvasRef.current = canvas;
 
@@ -168,9 +174,8 @@ export default function RecordScreen({ active, glamMode = false }) {
 
           ctx.clearRect(0, 0, cw, ch);
           ctx.save();
-          // Translate to centre, rotate -90° — no mirroring
-          ctx.translate(cw / 2, ch / 2);
-          ctx.rotate(-Math.PI / 2);
+          ctx.translate(cw / 2, ch / 2);  // move to canvas centre
+          ctx.rotate(angle);               // CW: +π/2  |  CCW: -π/2
           ctx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
           ctx.restore();
 
@@ -244,11 +249,12 @@ export default function RecordScreen({ active, glamMode = false }) {
     if (useGlam) {
       recordStream = await startGlamCanvas(rawStream);
       setIsGlamActive(true);
-    } else if (isPortrait && mismatch === 'rotate90') {
-      // Physically rotate: canvas draws portrait-sized frames (-90° corrected).
+    } else if (isPortrait && (mismatch === 'rotate90cw' || mismatch === 'rotate90ccw')) {
+      // Physically rotate: canvas draws portrait-sized frames at the correct angle.
+      // mismatch is passed as 'direction' so startRotateCanvas uses +/- Math.PI/2.
       // The canvas stream is used for both the live preview AND the recording,
       // so the saved file is a real upright portrait video — no metadata trick.
-      recordStream = await startRotateCanvas(rawStream);
+      recordStream = await startRotateCanvas(rawStream, mismatch);
       // (startRotateCanvas already sets videoRef.current.srcObject)
     } else {
       if (videoRef.current && !isAudioOnly) { videoRef.current.srcObject = rawStream; }

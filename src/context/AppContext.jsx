@@ -55,7 +55,7 @@ export const DEFAULT_SETTINGS = {
   },
   // Orientation / camera geometry
   orientationMode: 'auto',      // 'auto' | 'landscape' | 'portrait'
-  cameraMismatch:  'letterbox', // 'letterbox' | 'centercrop' | 'rotate90'
+  cameraMismatch:  'letterbox', // 'letterbox' | 'centercrop' | 'rotate90cw' | 'rotate90ccw'
 };
 
 // ── Provider ─────────────────────────────────────────────────────────────

@@ -10,11 +10,15 @@
  *   'portrait'  — always 9:16 regardless of device rotation
  *
  * cameraMismatch (only meaningful when isPortrait === true):
- *   'letterbox'  — object-fit:contain, black bars, full frame visible (default)
- *   'centercrop' — object-fit:cover, fills the portrait space (crops sides)
- *   'rotate90'   — CSS rotate 90°+scale for physically-sideways cameras
+ *   'letterbox'   — object-fit:contain, black bars, full frame visible (default)
+ *   'centercrop'  — object-fit:cover, fills the portrait space (crops sides)
+ *   'rotate90cw'  — canvas pipeline rotates +90° (CW) for physically-sideways cameras
+ *   'rotate90ccw' — canvas pipeline rotates -90° (CCW) for physically-sideways cameras
  */
 import { useState, useEffect } from 'react';
+
+// Convenience: true for either rotation direction
+const isRotate = (m) => m === 'rotate90cw' || m === 'rotate90ccw';
 
 // ── Main hook ──────────────────────────────────────────────────────────────
 export function useOrientation(settings) {
@@ -50,6 +54,8 @@ export function useOrientation(settings) {
  * getPreviewVideoStyle
  * Returns inline styles for the live camera <video> element in RecordScreen.
  * No mirroring — the camera is displayed exactly as it sees the scene.
+ * For rotate90cw/ccw the canvas pipeline replaces srcObject with an already-correct
+ * portrait stream, so no CSS transform is needed here.
  */
 export function getPreviewVideoStyle(isPortrait, mismatch) {
   if (!isPortrait) {
@@ -58,9 +64,9 @@ export function getPreviewVideoStyle(isPortrait, mismatch) {
   switch (mismatch) {
     case 'centercrop':
       return { objectFit: 'cover' };
-    case 'rotate90':
-      // Canvas pipeline (startRotateCanvas) already provides a correctly-oriented
-      // portrait stream — just fill the container with no extra transforms.
+    case 'rotate90cw':
+    case 'rotate90ccw':
+      // Canvas stream is already portrait-correct — fill the container normally.
       return { objectFit: 'cover' };
     case 'letterbox':
     default:
@@ -71,7 +77,7 @@ export function getPreviewVideoStyle(isPortrait, mismatch) {
 /**
  * getReplayVideoStyle
  * Returns inline styles for the replay <video> element in ReviewScreen.
- * No mirror applied (the recording is already the correct orientation).
+ * No mirror applied (replaying the saved recording, which is physically correct).
  */
 export function getReplayVideoStyle(isPortrait, mismatch) {
   if (!isPortrait) {
@@ -80,12 +86,10 @@ export function getReplayVideoStyle(isPortrait, mismatch) {
   switch (mismatch) {
     case 'centercrop':
       return { objectFit: 'cover' };
-
-    case 'rotate90':
-      // The saved file is physically portrait (720×1280 from the canvas pipeline).
-      // Just display it normally — object-fit:contain shows the full upright frame.
+    case 'rotate90cw':
+    case 'rotate90ccw':
+      // Saved file is physically portrait (720×1280 from the canvas pipeline).
       return { objectFit: 'contain' };
-
     case 'letterbox':
     default:
       return { objectFit: 'contain' };
@@ -103,13 +107,12 @@ export function getReplayCardStyle(isPortrait, mismatch) {
   }
   switch (mismatch) {
     case 'centercrop':
-      // Fill the media area completely so the video can fill the portrait space
+      // Fill the media area so the video can cover the portrait space
       return { width: '100%', height: '100%', aspectRatio: 'unset' };
-
-    case 'rotate90':
-      // The saved file is physically 9:16 portrait — display as a tall card
+    case 'rotate90cw':
+    case 'rotate90ccw':
+      // Saved file is physically 9:16 portrait — display as a tall card
       return { aspectRatio: '9 / 16', height: '100%', width: 'auto' };
-
     case 'letterbox':
     default:
       // 16:9 card full-width — video shows with black bars above/below
