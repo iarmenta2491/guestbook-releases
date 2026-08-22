@@ -102,6 +102,9 @@ const DEFAULT_SETTINGS = {
     bold:            false,
     fontFamily:      'default',
   },
+  // Orientation / camera geometry
+  orientationMode: 'auto',      // 'auto' | 'landscape' | 'portrait'
+  cameraMismatch:  'letterbox', // 'letterbox' | 'centercrop' | 'rotate90'
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

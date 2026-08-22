@@ -664,6 +664,60 @@ function TabEventSettings({ draft, setDraft }) {
             </select>
           </div>
         </div>
+
+        {/* ── Screen Orientation ──────────────────────────────────────────── */}
+        <div className="settings-section">
+          <div className="settings-section-title">📐 Screen Orientation</div>
+
+          {/* Master orientation mode */}
+          <div className="form-row">
+            <label className="form-label">Orientation Mode</label>
+            <select
+              className="admin-select"
+              value={draft.orientationMode || 'auto'}
+              onChange={e => setDraft(d => ({ ...d, orientationMode: e.target.value }))}
+            >
+              <option value="auto">Auto (Device Native)</option>
+              <option value="landscape">Force Landscape (16:9)</option>
+              <option value="portrait">Force Portrait (9:16)</option>
+            </select>
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0 8px 0', lineHeight: 1.5 }}>
+            {(!draft.orientationMode || draft.orientationMode === 'auto') &&
+              'Reads the device/OS orientation in real time. Best for tablets that rotate freely.'}
+            {draft.orientationMode === 'landscape' &&
+              'Locks all screens to 16:9 widescreen regardless of device rotation.'}
+            {draft.orientationMode === 'portrait' &&
+              'Locks all screens to 9:16 vertical. Use the Camera Mismatch setting below to handle laptop webcams.'}
+          </div>
+
+          {/* Camera mismatch — only shown in portrait mode */}
+          {draft.orientationMode === 'portrait' && (
+            <>
+              <div className="form-row" style={{ marginTop: 4 }}>
+                <label className="form-label">Camera Mismatch</label>
+                <select
+                  className="admin-select"
+                  value={draft.cameraMismatch || 'letterbox'}
+                  onChange={e => setDraft(d => ({ ...d, cameraMismatch: e.target.value }))}
+                >
+                  <option value="letterbox">Letterbox (Contain) — full frame, black bars</option>
+                  <option value="centercrop">Center Crop (Cover) — fills vertical space</option>
+                  <option value="rotate90">Rotate 90° — camera mounted sideways</option>
+                </select>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0 4px 0', lineHeight: 1.5 }}>
+                {(!draft.cameraMismatch || draft.cameraMismatch === 'letterbox') &&
+                  'Shows the full video with black bars. Best choice for laptop webcams — nothing is cropped.'}
+                {draft.cameraMismatch === 'centercrop' &&
+                  'Zooms to fill the portrait space. Left/right edges of the landscape feed are cropped.'}
+                {draft.cameraMismatch === 'rotate90' &&
+                  'Rotates the feed 90°. Use when the physical camera is mounted on its side.'}
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="settings-section">
           <div className="settings-section-title">Durations</div>
           <SliderRow label="Max Recording" value={draft.maxDuration} min={10} max={300} step={5} onChange={v => setDraft(d => ({ ...d, maxDuration: v }))} />

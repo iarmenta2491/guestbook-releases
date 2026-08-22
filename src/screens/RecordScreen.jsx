@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { useOrientation, getPreviewVideoStyle } from '../hooks/useOrientation';
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -22,7 +23,8 @@ export default function RecordScreen({ active, glamMode = false }) {
   const [selectedMic, setSelectedMic]       = useState('default');
   const [mediaError, setMediaError]         = useState(null);
   const [isGlamActive, setIsGlamActive]     = useState(false);
-  const [isLandscape, setIsLandscape]       = useState(() => window.innerWidth > window.innerHeight);
+  // Resolve orientation mode + camera mismatch from admin settings
+  const { isPortrait, mismatch } = useOrientation(settings);
 
   const videoRef        = useRef(null);   // preview <video> (camera or canvas)
   const canvasRef       = useRef(null);   // offscreen canvas for glam filter
@@ -40,19 +42,8 @@ export default function RecordScreen({ active, glamMode = false }) {
   const isAudioOnly      = settings.mode === 'audio';
   const maxDuration      = settings.maxDuration || 120;
   const countdownSeconds = settings.countdownSeconds ?? 3;
-  // Use glamMode prop if passed (from GLAM button on Attract Screen)
   const useGlam = (glamMode || isGlamActive) && settings.enableGlam && !isAudioOnly;
-
   const remainingSeconds = Math.max(0, maxDuration - elapsedSeconds);
-
-  // ── Orientation tracking for countdown position ─────────────────────────
-  useEffect(() => {
-    const mq = window.matchMedia('(orientation: landscape)');
-    const handler = (e) => setIsLandscape(e.matches);
-    setIsLandscape(mq.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
 
   /* ── Enumerate devices ─────────────────────────────────────────────────── */
   useEffect(() => {
@@ -70,10 +61,6 @@ export default function RecordScreen({ active, glamMode = false }) {
     enumerate();
   }, [active, isAudioOnly]);
 
-  // Tracks whether the actual live camera stream is portrait (height > width).
-  // Updated from the video element's loadedmetadata event.
-  const [streamIsPortrait, setStreamIsPortrait] = useState(false);
-
   /* ── Get user media — orientation-aware constraints ────────────────────── */
   const acquireStream = useCallback(async () => {
     setMediaError(null);
@@ -82,17 +69,14 @@ export default function RecordScreen({ active, glamMode = false }) {
       if (isAudioOnly) {
         videoConstraints = false;
       } else if (selectedCamera !== 'default') {
-        // Specific device — let browser pick best resolution for that camera
         videoConstraints = { deviceId: { exact: selectedCamera } };
       } else {
-        // Default camera: request dimensions that match the current orientation.
-        // Portrait kiosk (window taller than wide) → ask for portrait stream.
-        // Landscape kiosk → standard 16:9.
-        if (isLandscape) {
-          videoConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
-        } else {
-          videoConstraints = { width: { ideal: 720 }, height: { ideal: 1280 }, facingMode: 'user' };
-        }
+        // Request dimensions matching the effective orientation.
+        // rotate90 uses landscape constraints (camera is sideways, not rotated in hardware).
+        const wantPortrait = isPortrait && mismatch !== 'rotate90';
+        videoConstraints = wantPortrait
+          ? { width: { ideal: 720  }, height: { ideal: 1280 }, facingMode: 'user' }
+          : { width: { ideal: 1280 }, height: { ideal: 720  }, facingMode: 'user' };
       }
       const audioConstraints = selectedMic === 'default'
         ? true
@@ -104,7 +88,7 @@ export default function RecordScreen({ active, glamMode = false }) {
       setMediaError(`Could not access camera/microphone: ${err.message}`);
       return null;
     }
-  }, [isAudioOnly, isLandscape, selectedCamera, selectedMic]);
+  }, [isAudioOnly, isPortrait, mismatch, selectedCamera, selectedMic]);
 
   /* ── GLAM canvas pipeline ──────────────────────────────────────────────── */
   // Returns Promise<MediaStream>: resolves to canvas-captured stream after
@@ -515,18 +499,15 @@ export default function RecordScreen({ active, glamMode = false }) {
           <div className="record-audio-bg" />
         ) : (
           <>
-            {/* Video preview — switches object-fit based on actual stream orientation */}
+            {/* Video preview — styled by orientation mode + mismatch setting */}
             <video
               ref={videoRef}
               className="record-video"
               autoPlay muted playsInline
               style={{
-                objectFit: streamIsPortrait ? 'contain' : 'cover',
-                background: streamIsPortrait ? '#000' : undefined,
-              }}
-              onLoadedMetadata={(e) => {
-                const v = e.currentTarget;
-                setStreamIsPortrait(v.videoHeight > v.videoWidth);
+                ...getPreviewVideoStyle(isPortrait, mismatch),
+                // Black background for letterbox so bars look clean
+                background: (isPortrait && mismatch === 'letterbox') ? '#000' : undefined,
               }}
             />
             <div className="record-video-overlay" />
@@ -551,7 +532,7 @@ export default function RecordScreen({ active, glamMode = false }) {
         {phase === 'recording' && (
           <div
             className={`record-countdown-timer${remainingSeconds <= 10 ? ' warn' : ''}`}
-            style={isLandscape ? { bottom: 40, right: 40, left: 'auto', transform: 'none' } : {}}
+            style={!isPortrait ? { bottom: 40, right: 40, left: 'auto', transform: 'none' } : {}}
           >
             {formatTime(remainingSeconds)}
           </div>
@@ -572,7 +553,7 @@ export default function RecordScreen({ active, glamMode = false }) {
         {/* ── "Tap to stop" hint label ── */}
         {phase === 'recording' && (
           <div style={{
-            position: 'absolute', bottom: isLandscape ? 44 : 110, left: '50%',
+            position: 'absolute', bottom: !isPortrait ? 44 : 110, left: '50%',
             transform: 'translateX(-50%)', zIndex: 7,
             fontSize: '0.85rem', fontWeight: 600, letterSpacing: '0.08em',
             color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase',

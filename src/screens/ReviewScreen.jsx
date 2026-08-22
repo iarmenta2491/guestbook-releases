@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useOrientation, getReplayCardStyle, getReplayVideoStyle } from '../hooks/useOrientation';
 import '../styles/ReviewScreen.css';
 
 /**
@@ -18,6 +19,9 @@ export default function ReviewScreen({ active }) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const videoRef = useRef(null);
+
+  // Resolve orientation + mismatch from admin settings
+  const { isPortrait, mismatch } = useOrientation(settings);
 
   const isAudioOnly   = settings.mode === 'audio';
   const replayEnabled = settings.enableReplay && !!session.recordingUrl;
@@ -128,8 +132,11 @@ export default function ReviewScreen({ active }) {
                 </button>
               </div>
             ) : (
-              /* ── Video player — always 16:9, full width, no zoom ──────── */
-              <div className="review-video-card">
+              /* ── Video player — shape + fit driven by orientation settings ── */
+              <div
+                className="review-video-card"
+                style={getReplayCardStyle(isPortrait, mismatch)}
+              >
                 <video
                   ref={videoRef}
                   className="review-video"
@@ -138,6 +145,11 @@ export default function ReviewScreen({ active }) {
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   playsInline
+                  style={{
+                    ...getReplayVideoStyle(isPortrait, mismatch),
+                    // Black background for letterbox so bars look clean
+                    background: (isPortrait && mismatch === 'letterbox') ? '#000' : undefined,
+                  }}
                 />
                 <button
                   className="review-video-overlay-btn"

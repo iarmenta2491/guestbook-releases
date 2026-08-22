@@ -53,6 +53,9 @@ export const DEFAULT_SETTINGS = {
     colorAnimate: false,
     textAnimate:  false,
   },
+  // Orientation / camera geometry
+  orientationMode: 'auto',      // 'auto' | 'landscape' | 'portrait'
+  cameraMismatch:  'letterbox', // 'letterbox' | 'centercrop' | 'rotate90'
 };
 
 // ── Provider ─────────────────────────────────────────────────────────────
