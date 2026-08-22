@@ -655,6 +655,9 @@ async function generateMobileMP4(sourcePath, destPath) {
       '-c:v', 'libx264',
       '-preset', 'ultrafast',     // fastest encode — 1-3s for typical kiosk clips
       '-crf', '28',               // good mobile quality at small file size
+      // Round width and height to nearest even number (required by yuv420p).
+      // trunc(iw/2)*2 preserves aspect ratio — portrait input stays portrait.
+      '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
       '-c:a', 'aac',
       '-movflags', '+faststart',  // moov atom at front — required for iOS progressive download
       '-pix_fmt', 'yuv420p',      // widest iOS/Android device compatibility
@@ -874,11 +877,13 @@ ipcMain.handle('start-share-server', async (_, { clipPath }) => {
     <div class="icon">&#x1F4F1;</div>
     <p class="tagline">Your video message is ready.<br>Tap below to download it.</p>
     <div class="ios-guide" id="iosGuide">
-      <div class="ios-guide-title">&#x1F34E; iPhone User Guide</div>
+      <div class="ios-guide-title">&#x1F34E; iPhone &mdash; Save to Camera Roll</div>
       <ol>
-        <li>Tap <strong>Download Video</strong> below.</li>
-        <li>Open your blue <strong>Files</strong> app.</li>
-        <li>Tap the <strong>Share &#x29C9;</strong> icon, then tap <strong>Save Video</strong> to move it to your Camera Roll.</li>
+        <li>Tap <strong>Download Video</strong> below, then tap <strong>Download</strong> on the pop-up.</li>
+        <li>Tap the <strong>Downloads icon</strong> (blue &#x2193; arrow) in the Safari address bar at the bottom of the screen.</li>
+        <li>Select <strong>Downloads</strong> from the menu, then tap your video file to open it.</li>
+        <li>Tap the <strong>Share icon</strong> (the square with an arrow pointing up &#x2B06;).</li>
+        <li>Tap <strong>Save Video</strong> to save it directly to your Camera Roll.</li>
       </ol>
     </div>
     <a class="dl-btn" href="${videoHref}" download="${safeName}">

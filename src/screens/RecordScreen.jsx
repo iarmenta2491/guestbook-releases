@@ -70,15 +70,30 @@ export default function RecordScreen({ active, glamMode = false }) {
     enumerate();
   }, [active, isAudioOnly]);
 
-  /* ── Get user media ────────────────────────────────────────────────────── */
+  // Tracks whether the actual live camera stream is portrait (height > width).
+  // Updated from the video element's loadedmetadata event.
+  const [streamIsPortrait, setStreamIsPortrait] = useState(false);
+
+  /* ── Get user media — orientation-aware constraints ────────────────────── */
   const acquireStream = useCallback(async () => {
     setMediaError(null);
     try {
-      const videoConstraints = isAudioOnly
-        ? false
-        : selectedCamera === 'default'
-          ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
-          : { deviceId: { exact: selectedCamera } };
+      let videoConstraints;
+      if (isAudioOnly) {
+        videoConstraints = false;
+      } else if (selectedCamera !== 'default') {
+        // Specific device — let browser pick best resolution for that camera
+        videoConstraints = { deviceId: { exact: selectedCamera } };
+      } else {
+        // Default camera: request dimensions that match the current orientation.
+        // Portrait kiosk (window taller than wide) → ask for portrait stream.
+        // Landscape kiosk → standard 16:9.
+        if (isLandscape) {
+          videoConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' };
+        } else {
+          videoConstraints = { width: { ideal: 720 }, height: { ideal: 1280 }, facingMode: 'user' };
+        }
+      }
       const audioConstraints = selectedMic === 'default'
         ? true
         : { deviceId: { exact: selectedMic } };
@@ -89,7 +104,7 @@ export default function RecordScreen({ active, glamMode = false }) {
       setMediaError(`Could not access camera/microphone: ${err.message}`);
       return null;
     }
-  }, [isAudioOnly, selectedCamera, selectedMic]);
+  }, [isAudioOnly, isLandscape, selectedCamera, selectedMic]);
 
   /* ── GLAM canvas pipeline ──────────────────────────────────────────────── */
   // Returns Promise<MediaStream>: resolves to canvas-captured stream after
@@ -500,8 +515,20 @@ export default function RecordScreen({ active, glamMode = false }) {
           <div className="record-audio-bg" />
         ) : (
           <>
-            {/* Video preview — shows either raw camera or canvas-filtered stream */}
-            <video ref={videoRef} className="record-video" autoPlay muted playsInline />
+            {/* Video preview — switches object-fit based on actual stream orientation */}
+            <video
+              ref={videoRef}
+              className="record-video"
+              autoPlay muted playsInline
+              style={{
+                objectFit: streamIsPortrait ? 'contain' : 'cover',
+                background: streamIsPortrait ? '#000' : undefined,
+              }}
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                setStreamIsPortrait(v.videoHeight > v.videoWidth);
+              }}
+            />
             <div className="record-video-overlay" />
           </>
         )}

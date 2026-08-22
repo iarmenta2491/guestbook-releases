@@ -13,14 +13,27 @@ import '../styles/ReviewScreen.css';
 export default function ReviewScreen({ active }) {
   const { session, settings, navigateTo, resetSession, saveRecording } = useApp();
 
-  const [phase, setPhase]       = useState('ready');
-  const [saveError, setSaveError] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [phase, setPhase]         = useState('ready');
+  const [saveError, setSaveError]  = useState(null);
+  const [isPlaying, setIsPlaying]  = useState(false);
+  // True when the recorded video itself is portrait (height > width)
+  const [videoIsPortrait, setVideoIsPortrait] = useState(false);
+  // True when the device window is in landscape orientation
+  const [isLandscape, setIsLandscape] = useState(() => window.innerWidth > window.innerHeight);
 
   const videoRef = useRef(null);
 
-  const isAudioOnly  = settings.mode === 'audio';
+  const isAudioOnly   = settings.mode === 'audio';
   const replayEnabled = settings.enableReplay && !!session.recordingUrl;
+
+  // ── Orientation tracking ─────────────────────────────────────────────────
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: landscape)');
+    const handler = (e) => setIsLandscape(e.matches);
+    setIsLandscape(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   /* ── Activate / Deactivate lifecycle ─────────────────────────────────── */
   useEffect(() => {
@@ -32,6 +45,7 @@ export default function ReviewScreen({ active }) {
       setPhase('ready');
       setSaveError(null);
       setIsPlaying(false);
+      setVideoIsPortrait(false);
       return;
     }
 
@@ -103,11 +117,17 @@ export default function ReviewScreen({ active }) {
       {/* Decorative background */}
       <div className="review-bg" />
 
-      {/* ── Main layout: media top, buttons bottom ─────────────────────── */}
-      <div className="review-layout">
+      {/* ── Main layout: adapts column/row based on orientation ─────────── */}
+      <div
+        className="review-layout"
+        style={isLandscape && !videoIsPortrait ? { flexDirection: 'row' } : undefined}
+      >
 
-        {/* ── Top: Media area ─────────────────────────────────────────── */}
-        <div className="review-media-area">
+        {/* ── Top/Left: Media area ─────────────────────────────────────── */}
+        <div
+          className="review-media-area"
+          style={isLandscape && !videoIsPortrait ? { flex: '1 1 auto', padding: '16px 24px 16px 32px' } : undefined}
+        >
           {replayEnabled ? (
             /* ── REPLAY ENABLED: embedded player ──────────────────────── */
             isAudioOnly ? (
@@ -136,7 +156,17 @@ export default function ReviewScreen({ active }) {
                 </button>
               </div>
             ) : (
-              <div className="review-video-card">
+              <div
+                className="review-video-card"
+                style={{
+                  // Lock the card to the correct aspect ratio based on actual video dimensions
+                  aspectRatio: videoIsPortrait ? '9 / 16' : '16 / 9',
+                  // In landscape device + landscape video: fill the available width
+                  width: isLandscape && !videoIsPortrait ? '100%' : undefined,
+                  // In portrait video: use auto width so aspect-ratio drives the sizing
+                  maxWidth: videoIsPortrait ? 'min(90vh * 0.5625, 100%)' : undefined,
+                }}
+              >
                 <video
                   ref={videoRef}
                   className="review-video"
@@ -144,7 +174,12 @@ export default function ReviewScreen({ active }) {
                   onEnded={handleVideoEnded}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
+                  onLoadedMetadata={(e) => {
+                    const v = e.currentTarget;
+                    setVideoIsPortrait(v.videoHeight > v.videoWidth);
+                  }}
                   playsInline
+                  style={{ objectFit: 'contain' }}
                 />
                 {/* Play/pause overlay tap target */}
                 <button
@@ -175,8 +210,13 @@ export default function ReviewScreen({ active }) {
           )}
         </div>
 
-        {/* ── Bottom: Action buttons — always visible ──────────────────── */}
-        <div className="review-actions-area">
+        {/* ── Bottom/Right: Action buttons — always visible ─────────────── */}
+        <div
+          className="review-actions-area"
+          style={isLandscape && !videoIsPortrait
+            ? { flex: '0 0 320px', justifyContent: 'center', padding: '24px 32px 24px 16px', background: 'linear-gradient(to left, rgba(7,7,26,0.85) 0%, rgba(7,7,26,0.60) 70%, transparent 100%)' }
+            : undefined}
+        >
           {saveError && (
             <p className="review-error animate-fadeIn">{saveError}</p>
           )}

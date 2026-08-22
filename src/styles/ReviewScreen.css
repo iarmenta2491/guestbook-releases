@@ -323,3 +323,29 @@
   color: var(--text-secondary);
   font-weight: 500;
 }
+
+/* ── Landscape / portrait orientation helpers ─────────────────────────────── */
+
+/* In landscape with a landscape video, the layout switches to row (via JS inline
+   style). These rules make the actions area stack vertically and stay compact. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .review-actions-area {
+    padding: 8px 24px 12px;
+    gap: 8px;
+  }
+  .review-action-btn {
+    height: 52px !important;
+    font-size: 1rem !important;
+  }
+  .review-hint {
+    font-size: 0.78rem;
+  }
+}
+
+/* When JS sets the video card to a 9/16 aspect ratio (portrait video),
+   make the card as tall as the available space allows. */
+.review-video-card[style*="9 / 16"],
+.review-video-card[style*="9/16"] {
+  height: 100%;
+  width: auto;
+}
