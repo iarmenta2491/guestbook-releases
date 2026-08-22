@@ -106,15 +106,11 @@ export default function RecordScreen({ active, glamMode = false }) {
         function drawFrame() {
           if (!canvas || !ctx) return;
           const w = canvas.width, h = canvas.height;
-          const tmp = document.createElement('canvas');
-          tmp.width = w; tmp.height = h;
-          const tctx = tmp.getContext('2d');
-          tctx.save(); tctx.translate(w, 0); tctx.scale(-1, 1);
-          tctx.filter = 'none';       tctx.drawImage(video, 0, 0, w, h);
-          tctx.filter = 'blur(2px) opacity(0.35)'; tctx.drawImage(video, 0, 0, w, h);
-          tctx.restore();
+          // No mirroring — draw raw frame with GLAM colour grading only
           ctx.filter = 'contrast(1.06) brightness(1.08) saturate(1.1)';
-          ctx.clearRect(0, 0, w, h); ctx.drawImage(tmp, 0, 0); ctx.filter = 'none';
+          ctx.clearRect(0, 0, w, h);
+          ctx.drawImage(video, 0, 0, w, h);
+          ctx.filter = 'none';
           glamRafRef.current = requestAnimationFrame(drawFrame);
         }
         glamRafRef.current = requestAnimationFrame(drawFrame);
@@ -135,23 +131,17 @@ export default function RecordScreen({ active, glamMode = false }) {
   }, []);
 
   /* ── Rotate-90 canvas pipeline ─────────────────────────────────────────── */
-  // When the physical camera is mounted sideways (rotate90 mismatch), we
-  // draw each frame onto a portrait-shaped canvas with a -90° rotation so
-  // the saved video file is already upright — no CSS trick, no metadata flag.
+  // Draws each frame onto a portrait-shaped canvas with a -90° rotation so
+  // the saved video file is physically upright — no CSS trick, no metadata flag.
   //
   // Canvas dimensions: swapped from the raw stream (720 × 1280 for a 1280×720 cam).
   // Draw sequence per frame:
   //   1. Translate to canvas centre
-  //   2. Rotate -π/2 radians (-90° — corrects a clockwise-mounted camera)
-  //   3. Mirror horizontally (scaleX(-1)) so the selfie view is not reversed
-  //   4. drawImage centred at origin (which is now the rotated+mirrored origin)
-  //
-  // The resulting canvas stream has portrait pixel dimensions, so both the
-  // live preview video and the MediaRecorder receive an already-correct signal.
-  const rotateCanvasRef = useRef(null); // the portrait <canvas> element
+  //   2. Rotate -π/2 (-90°) — corrects a clockwise-mounted sideways camera
+  //   3. drawImage centred at origin — no mirroring, exactly as camera sees it
+  const rotateCanvasRef = useRef(null);
 
   const startRotateCanvas = useCallback((rawStream) => {
-    // Create an off-screen portrait canvas
     const canvas = document.createElement('canvas');
     rotateCanvasRef.current = canvas;
 
@@ -166,30 +156,24 @@ export default function RecordScreen({ active, glamMode = false }) {
         const vh = video.videoHeight || 720;
 
         // Portrait canvas: swap width ↔ height
-        canvas.width  = vh;   // e.g. 720
-        canvas.height = vw;   // e.g. 1280
+        canvas.width  = vh;  // e.g. 720
+        canvas.height = vw;  // e.g. 1280
 
         const ctx = canvas.getContext('2d');
 
         function drawFrame() {
           if (!ctx) return;
-          const cw = canvas.width;   // 720
-          const ch = canvas.height;  // 1280
+          const cw = canvas.width;
+          const ch = canvas.height;
 
           ctx.clearRect(0, 0, cw, ch);
           ctx.save();
-
-          // Move to canvas centre, rotate -90° (corrects CW-mounted camera),
-          // then mirror horizontally for selfie-correct preview.
+          // Translate to centre, rotate -90° — no mirroring
           ctx.translate(cw / 2, ch / 2);
           ctx.rotate(-Math.PI / 2);
-          ctx.scale(-1, 1); // mirror
-
-          // Draw the source frame centred at origin.
-          // After rotation the source frame's (vw × vh) maps to (vh × vw) on canvas.
           ctx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
-
           ctx.restore();
+
           glamRafRef.current = requestAnimationFrame(drawFrame);
         }
 
@@ -199,10 +183,7 @@ export default function RecordScreen({ active, glamMode = false }) {
         const canvasStream = canvas.captureStream(30);
         audioTracks.forEach(t => canvasStream.addTrack(t));
         canvasStreamRef.current = canvasStream;
-
-        // Show the rotated canvas stream in the preview video element
         if (videoRef.current) { videoRef.current.srcObject = canvasStream; }
-
         resolve(canvasStream);
       };
       video.play().catch(() => resolve(rawStream));
@@ -394,7 +375,7 @@ export default function RecordScreen({ active, glamMode = false }) {
         /* Camera preview / canvas preview */
         .record-video {
           position: absolute; inset: 0; width: 100%; height: 100%;
-          object-fit: cover; transform: scaleX(-1); z-index: 0;
+          object-fit: cover; z-index: 0;
         }
         /* Glam canvas (hidden — we show canvas stream via <video>) */
         .record-glam-canvas { display: none; }

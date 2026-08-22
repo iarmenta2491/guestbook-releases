@@ -49,29 +49,22 @@ export function useOrientation(settings) {
 /**
  * getPreviewVideoStyle
  * Returns inline styles for the live camera <video> element in RecordScreen.
- * Includes the scaleX(-1) mirror for non-rotate90 modes so the user sees
- * themselves naturally in the preview.
+ * No mirroring — the camera is displayed exactly as it sees the scene.
  */
 export function getPreviewVideoStyle(isPortrait, mismatch) {
   if (!isPortrait) {
-    // Landscape: fill the screen with the camera feed
-    return { objectFit: 'cover', transform: 'scaleX(-1)' };
+    return { objectFit: 'cover' };
   }
   switch (mismatch) {
     case 'centercrop':
-      // Fill the portrait space — crops left/right edges of the landscape feed
-      return { objectFit: 'cover', transform: 'scaleX(-1)' };
-
+      return { objectFit: 'cover' };
     case 'rotate90':
-      // The recording pipeline uses startRotateCanvas() which replaces the
-      // video element's srcObject with an already-correct portrait canvas stream.
-      // No CSS rotation is needed — just fill the container normally.
-      return { objectFit: 'cover', transform: 'none' };
-
+      // Canvas pipeline (startRotateCanvas) already provides a correctly-oriented
+      // portrait stream — just fill the container with no extra transforms.
+      return { objectFit: 'cover' };
     case 'letterbox':
     default:
-      // Show full frame — black bars will appear for landscape video in portrait space
-      return { objectFit: 'contain', transform: 'scaleX(-1)' };
+      return { objectFit: 'contain' };
   }
 }
 
