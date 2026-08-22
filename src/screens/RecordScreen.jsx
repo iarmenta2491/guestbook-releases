@@ -244,19 +244,38 @@ export default function RecordScreen({ active, glamMode = false }) {
     const rawStream = await acquireStream();
     if (!rawStream) return;
 
+    // ── Dynamic hardware mismatch detection ─────────────────────────────────
+    // Inspect the actual video track dimensions to detect a real camera-vs-UI
+    // mismatch, regardless of whether we're in Auto, Force Portrait, or Force
+    // Landscape mode. This means:
+    //   • A tablet in Auto mode that physically rotates to Portrait will correctly
+    //     detect that its hardware camera is still delivering Landscape frames.
+    //   • Rotating back to Landscape on the next recording = no mismatch, raw stream.
+    //   • A Force Portrait laptop = detected mismatch every time → canvas applied.
+    let cameraIsLandscape = false;
+    if (!isAudioOnly && isPortrait) {
+      const videoTrack = rawStream.getVideoTracks()[0];
+      if (videoTrack) {
+        const { width: camW = 0, height: camH = 0 } = videoTrack.getSettings();
+        cameraIsLandscape = camW > 0 && camW > camH;
+      }
+    }
+    // hasMismatch: UI is portrait but camera hardware delivers landscape frames
+    const hasMismatch = isPortrait && cameraIsLandscape;
+
     // Set up preview + choose the stream that MediaRecorder will encode
     let recordStream = rawStream;
     if (useGlam) {
       recordStream = await startGlamCanvas(rawStream);
       setIsGlamActive(true);
-    } else if (isPortrait && (mismatch === 'rotate90cw' || mismatch === 'rotate90ccw')) {
-      // Physically rotate: canvas draws portrait-sized frames at the correct angle.
-      // mismatch is passed as 'direction' so startRotateCanvas uses +/- Math.PI/2.
-      // The canvas stream is used for both the live preview AND the recording,
-      // so the saved file is a real upright portrait video — no metadata trick.
+    } else if (hasMismatch && (mismatch === 'rotate90cw' || mismatch === 'rotate90ccw')) {
+      // Rotate canvas pipeline: physically saves a portrait file (no CSS trick).
+      // mismatch is forwarded as 'direction' → +Math.PI/2 (CW) or -Math.PI/2 (CCW).
       recordStream = await startRotateCanvas(rawStream, mismatch);
-      // (startRotateCanvas already sets videoRef.current.srcObject)
+      // startRotateCanvas already sets videoRef.current.srcObject to the canvas stream.
     } else {
+      // letterbox / centercrop / landscape mode: show raw stream; CSS object-fit handles
+      // the visual display via getPreviewVideoStyle(isPortrait, mismatch).
       if (videoRef.current && !isAudioOnly) { videoRef.current.srcObject = rawStream; }
     }
 

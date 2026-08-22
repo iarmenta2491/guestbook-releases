@@ -684,15 +684,15 @@ function TabEventSettings({ draft, setDraft }) {
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0 8px 0', lineHeight: 1.5 }}>
             {(!draft.orientationMode || draft.orientationMode === 'auto') &&
-              'Reads the device/OS orientation in real time. Best for tablets that rotate freely.'}
+              'Reads the device/OS orientation in real time. On tablets that rotate freely, the Camera Mismatch setting below will automatically correct the video when the screen enters Portrait mode.'}
             {draft.orientationMode === 'landscape' &&
               'Locks all screens to 16:9 widescreen regardless of device rotation.'}
             {draft.orientationMode === 'portrait' &&
-              'Locks all screens to 9:16 vertical. Use the Camera Mismatch setting below to handle laptop webcams.'}
+              'Locks all screens to 9:16 vertical. Use the Camera Mismatch setting below to handle cameras that always deliver a landscape frame.'}
           </div>
 
-          {/* Camera mismatch — only shown in portrait mode */}
-          {draft.orientationMode === 'portrait' && (
+          {/* Camera Mismatch — shown for Auto and Force Portrait (not needed when locked Landscape) */}
+          {(draft.orientationMode === 'auto' || draft.orientationMode === 'portrait') && (
             <>
               <div className="form-row" style={{ marginTop: 4 }}>
                 <label className="form-label">Camera Mismatch</label>
@@ -709,7 +709,7 @@ function TabEventSettings({ draft, setDraft }) {
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0 4px 0', lineHeight: 1.5 }}>
                 {(!draft.cameraMismatch || draft.cameraMismatch === 'letterbox') &&
-                  'Shows the full video with black bars. Best choice for laptop webcams — nothing is cropped.'}
+                  'Shows the full video with black bars when portrait mode detects a landscape camera. Nothing is cropped.'}
                 {draft.cameraMismatch === 'centercrop' &&
                   'Zooms to fill the portrait space. Left/right edges of the landscape feed are cropped.'}
                 {draft.cameraMismatch === 'rotate90cw' &&
