@@ -134,6 +134,87 @@ export default function RecordScreen({ active, glamMode = false }) {
     canvasStreamRef.current = null;
   }, []);
 
+  /* ── Rotate-90 canvas pipeline ─────────────────────────────────────────── */
+  // When the physical camera is mounted sideways (rotate90 mismatch), we
+  // draw each frame onto a portrait-shaped canvas with a -90° rotation so
+  // the saved video file is already upright — no CSS trick, no metadata flag.
+  //
+  // Canvas dimensions: swapped from the raw stream (720 × 1280 for a 1280×720 cam).
+  // Draw sequence per frame:
+  //   1. Translate to canvas centre
+  //   2. Rotate -π/2 radians (-90° — corrects a clockwise-mounted camera)
+  //   3. Mirror horizontally (scaleX(-1)) so the selfie view is not reversed
+  //   4. drawImage centred at origin (which is now the rotated+mirrored origin)
+  //
+  // The resulting canvas stream has portrait pixel dimensions, so both the
+  // live preview video and the MediaRecorder receive an already-correct signal.
+  const rotateCanvasRef = useRef(null); // the portrait <canvas> element
+
+  const startRotateCanvas = useCallback((rawStream) => {
+    // Create an off-screen portrait canvas
+    const canvas = document.createElement('canvas');
+    rotateCanvasRef.current = canvas;
+
+    const video = document.createElement('video');
+    video.srcObject = rawStream;
+    video.muted = true;
+    video.playsInline = true;
+
+    return new Promise((resolve) => {
+      video.onloadedmetadata = () => {
+        const vw = video.videoWidth  || 1280;
+        const vh = video.videoHeight || 720;
+
+        // Portrait canvas: swap width ↔ height
+        canvas.width  = vh;   // e.g. 720
+        canvas.height = vw;   // e.g. 1280
+
+        const ctx = canvas.getContext('2d');
+
+        function drawFrame() {
+          if (!ctx) return;
+          const cw = canvas.width;   // 720
+          const ch = canvas.height;  // 1280
+
+          ctx.clearRect(0, 0, cw, ch);
+          ctx.save();
+
+          // Move to canvas centre, rotate -90° (corrects CW-mounted camera),
+          // then mirror horizontally for selfie-correct preview.
+          ctx.translate(cw / 2, ch / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.scale(-1, 1); // mirror
+
+          // Draw the source frame centred at origin.
+          // After rotation the source frame's (vw × vh) maps to (vh × vw) on canvas.
+          ctx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
+
+          ctx.restore();
+          glamRafRef.current = requestAnimationFrame(drawFrame);
+        }
+
+        glamRafRef.current = requestAnimationFrame(drawFrame);
+
+        const audioTracks = rawStream.getAudioTracks();
+        const canvasStream = canvas.captureStream(30);
+        audioTracks.forEach(t => canvasStream.addTrack(t));
+        canvasStreamRef.current = canvasStream;
+
+        // Show the rotated canvas stream in the preview video element
+        if (videoRef.current) { videoRef.current.srcObject = canvasStream; }
+
+        resolve(canvasStream);
+      };
+      video.play().catch(() => resolve(rawStream));
+    });
+  }, []);
+
+  const stopRotateCanvas = useCallback(() => {
+    if (glamRafRef.current) { cancelAnimationFrame(glamRafRef.current); glamRafRef.current = null; }
+    canvasStreamRef.current = null;
+    rotateCanvasRef.current = null;
+  }, []);
+
   /* ── Volume analyser ───────────────────────────────────────────────────── */
   const startAnalyser = useCallback((stream) => {
     try {
@@ -166,21 +247,28 @@ export default function RecordScreen({ active, glamMode = false }) {
   /* ── Stop & cleanup stream ─────────────────────────────────────────────── */
   const stopStream = useCallback(() => {
     stopGlamCanvas();
+    stopRotateCanvas();
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current)  { videoRef.current.srcObject = null; }
     stopAnalyser();
-  }, [stopAnalyser, stopGlamCanvas]);
+  }, [stopAnalyser, stopGlamCanvas, stopRotateCanvas]);
 
   /* ── Start countdown then record ───────────────────────────────────────── */
   const beginCountdown = useCallback(async () => {
     const rawStream = await acquireStream();
     if (!rawStream) return;
 
-    // Set up preview
+    // Set up preview + choose the stream that MediaRecorder will encode
     let recordStream = rawStream;
     if (useGlam) {
-      recordStream = await startGlamCanvas(rawStream);   // ← await the Promise
+      recordStream = await startGlamCanvas(rawStream);
       setIsGlamActive(true);
+    } else if (isPortrait && mismatch === 'rotate90') {
+      // Physically rotate: canvas draws portrait-sized frames (-90° corrected).
+      // The canvas stream is used for both the live preview AND the recording,
+      // so the saved file is a real upright portrait video — no metadata trick.
+      recordStream = await startRotateCanvas(rawStream);
+      // (startRotateCanvas already sets videoRef.current.srcObject)
     } else {
       if (videoRef.current && !isAudioOnly) { videoRef.current.srcObject = rawStream; }
     }
@@ -212,7 +300,7 @@ export default function RecordScreen({ active, glamMode = false }) {
       }
     }
     tick();
-  }, [acquireStream, countdownSeconds, useGlam, startGlamCanvas, isAudioOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [acquireStream, countdownSeconds, useGlam, startGlamCanvas, isPortrait, mismatch, startRotateCanvas, isAudioOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Actual MediaRecorder capture ──────────────────────────────────────── */
   function startCapture(rawStream, recordStream) {

@@ -54,7 +54,7 @@ export function useOrientation(settings) {
  */
 export function getPreviewVideoStyle(isPortrait, mismatch) {
   if (!isPortrait) {
-    // Landscape: fill the screen with the camera feed (standard behaviour)
+    // Landscape: fill the screen with the camera feed
     return { objectFit: 'cover', transform: 'scaleX(-1)' };
   }
   switch (mismatch) {
@@ -63,20 +63,10 @@ export function getPreviewVideoStyle(isPortrait, mismatch) {
       return { objectFit: 'cover', transform: 'scaleX(-1)' };
 
     case 'rotate90':
-      // Camera is physically mounted sideways.
-      // Use viewport units so the rotated element fills the full-screen preview.
-      // width:100vh → after 90° rotation becomes the visual HEIGHT (fills screen height)
-      // height:100vw → after 90° rotation becomes the visual WIDTH  (fills screen width)
-      return {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        width: '100vh',
-        height: '100vw',
-        transform: 'translate(-50%, -50%) rotate(90deg)',
-        objectFit: 'cover',
-        maxWidth: 'none',
-      };
+      // The recording pipeline uses startRotateCanvas() which replaces the
+      // video element's srcObject with an already-correct portrait canvas stream.
+      // No CSS rotation is needed — just fill the container normally.
+      return { objectFit: 'cover', transform: 'none' };
 
     case 'letterbox':
     default:
@@ -99,16 +89,9 @@ export function getReplayVideoStyle(isPortrait, mismatch) {
       return { objectFit: 'cover' };
 
     case 'rotate90':
-      return {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        width: '100vh',
-        height: '100vw',
-        transform: 'translate(-50%, -50%) rotate(90deg)',
-        objectFit: 'cover',
-        maxWidth: 'none',
-      };
+      // The saved file is physically portrait (720×1280 from the canvas pipeline).
+      // Just display it normally — object-fit:contain shows the full upright frame.
+      return { objectFit: 'contain' };
 
     case 'letterbox':
     default:
@@ -127,9 +110,12 @@ export function getReplayCardStyle(isPortrait, mismatch) {
   }
   switch (mismatch) {
     case 'centercrop':
-    case 'rotate90':
       // Fill the media area completely so the video can fill the portrait space
       return { width: '100%', height: '100%', aspectRatio: 'unset' };
+
+    case 'rotate90':
+      // The saved file is physically 9:16 portrait — display as a tall card
+      return { aspectRatio: '9 / 16', height: '100%', width: 'auto' };
 
     case 'letterbox':
     default:
