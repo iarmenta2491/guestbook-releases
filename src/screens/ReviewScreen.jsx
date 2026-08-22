@@ -30,15 +30,14 @@ export default function ReviewScreen({ active }) {
   useEffect(() => {
     const mq = window.matchMedia('(orientation: landscape)');
     const handler = (e) => setIsLandscape(e.matches);
-    setIsLandscape(mq.matches);
-    mq.addEventListener('change', handler);
+    setIsLandscape(mq.matches);          // sync on mount
+    mq.addEventListener('change', handler); // update on live rotation
     return () => mq.removeEventListener('change', handler);
   }, []);
 
   /* ── Activate / Deactivate lifecycle ─────────────────────────────────── */
   useEffect(() => {
     if (!active) {
-      // Stop any playback when screen goes inactive
       if (videoRef.current) {
         try { videoRef.current.pause(); videoRef.current.currentTime = 0; } catch (_) {}
       }
@@ -49,12 +48,16 @@ export default function ReviewScreen({ active }) {
       return;
     }
 
-    // Screen became active — reset to ready state
+    // ── Re-sync orientation the instant this screen becomes visible ──────
+    // The component stays mounted while other screens are shown, so the
+    // matchMedia listener may not have fired since the last orientation change.
+    // Reading it here guarantees the correct layout from the first frame.
+    setIsLandscape(window.matchMedia('(orientation: landscape)').matches);
+
     setPhase('ready');
     setSaveError(null);
     setIsPlaying(false);
 
-    // Auto-play replay if enabled (small delay for fade-in animation)
     if (replayEnabled) {
       const t = setTimeout(() => {
         if (videoRef.current) {
@@ -182,11 +185,7 @@ export default function ReviewScreen({ active }) {
                     setVideoIsPortrait(v.videoHeight > v.videoWidth);
                   }}
                   playsInline
-                  style={{
-                    // Portrait kiosk: cover fills the tall space (same as record screen live preview)
-                    // Landscape kiosk: contain keeps the full frame visible
-                    objectFit: !isLandscape ? 'cover' : 'contain',
-                  }}
+                  style={{ objectFit: 'contain' }}
                 />
                 {/* Play/pause overlay tap target */}
                 <button
