@@ -131,25 +131,22 @@ export default function RecordScreen({ active, glamMode = false }) {
     canvasStreamRef.current = null;
   }, []);
 
-  /* ── Rotate-90 canvas pipeline ─────────────────────────────────────────── */
-  // Draws each frame onto a portrait-shaped canvas with a ±90° rotation so
-  // the saved video file is physically upright — no CSS trick, no metadata flag.
+  /* ── Mismatch canvas pipeline ───────────────────────────────────────────── */
+  // Unified canvas pipeline for ALL portrait-vs-landscape camera mismatches.
+  // Every strategy bakes the geometry into the pixel data of a 720×1280 canvas,
+  // so the MediaRecorder saves a physically correct portrait WebM — no CSS tricks.
   //
-  // Canvas dimensions: swapped from the raw stream (720 × 1280 for a 1280×720 cam).
-  // Draw sequence per frame:
-  //   1. Translate to canvas centre  (canvas.width/2, canvas.height/2)
-  //   2. Rotate by angle:
-  //        rotate90cw  → +Math.PI/2  (camera top points RIGHT)
-  //        rotate90ccw → -Math.PI/2  (camera top points LEFT)
-  //   3. drawImage centred at origin (-vw/2, -vh/2, vw, vh) — no mirroring
-  const rotateCanvasRef = useRef(null);
+  // Strategy     Canvas draw
+  // ──────────── ──────────────────────────────────────────────────────────────
+  // rotate90cw   translate(centre) → rotate(+π/2) → drawImage centred
+  // rotate90ccw  translate(centre) → rotate(-π/2) → drawImage centred
+  // centercrop   scale = max(cw/vw, ch/vh)  — fills portrait space, crops sides
+  // letterbox    fill black + scale = min(cw/vw, ch/vh) — fits full frame + bars
+  const mismatchCanvasRef = useRef(null);
 
-  const startRotateCanvas = useCallback((rawStream, direction) => {
-    // +Math.PI/2 for clockwise, -Math.PI/2 for counter-clockwise
-    const angle = direction === 'rotate90cw' ? Math.PI / 2 : -Math.PI / 2;
-
+  const startMismatchCanvas = useCallback((rawStream, strategy) => {
     const canvas = document.createElement('canvas');
-    rotateCanvasRef.current = canvas;
+    mismatchCanvasRef.current = canvas;
 
     const video = document.createElement('video');
     video.srcObject = rawStream;
@@ -161,23 +158,53 @@ export default function RecordScreen({ active, glamMode = false }) {
         const vw = video.videoWidth  || 1280;
         const vh = video.videoHeight || 720;
 
-        // Portrait canvas: swap width ↔ height
-        canvas.width  = vh;  // e.g. 720
-        canvas.height = vw;  // e.g. 1280
+        // Portrait output canvas: always swap the landscape dimensions
+        const cw = Math.min(vw, vh);  // e.g. 720
+        const ch = Math.max(vw, vh);  // e.g. 1280
+        canvas.width  = cw;
+        canvas.height = ch;
 
         const ctx = canvas.getContext('2d');
 
         function drawFrame() {
           if (!ctx) return;
-          const cw = canvas.width;
-          const ch = canvas.height;
 
           ctx.clearRect(0, 0, cw, ch);
-          ctx.save();
-          ctx.translate(cw / 2, ch / 2);  // move to canvas centre
-          ctx.rotate(angle);               // CW: +π/2  |  CCW: -π/2
-          ctx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
-          ctx.restore();
+
+          if (strategy === 'rotate90cw' || strategy === 'rotate90ccw') {
+            // ── Rotation ─────────────────────────────────────────────────────
+            // Translate to canvas centre, rotate ±90°, draw source centred.
+            const angle = strategy === 'rotate90cw' ? Math.PI / 2 : -Math.PI / 2;
+            ctx.save();
+            ctx.translate(cw / 2, ch / 2);
+            ctx.rotate(angle);
+            ctx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
+            ctx.restore();
+
+          } else if (strategy === 'centercrop') {
+            // ── Center Crop (Cover) ───────────────────────────────────────────
+            // Scale so the video FILLS the portrait canvas; left/right overflow
+            // is naturally clipped by the canvas bounds (like object-fit:cover).
+            const scale = Math.max(cw / vw, ch / vh);
+            const dw = vw * scale;
+            const dh = vh * scale;
+            const dx = (cw - dw) / 2;
+            const dy = (ch - dh) / 2;
+            ctx.drawImage(video, dx, dy, dw, dh);
+
+          } else {
+            // ── Letterbox (Contain) — default ─────────────────────────────────
+            // Scale so the entire video frame FITS inside the portrait canvas;
+            // fill remaining space above/below with solid black.
+            const scale = Math.min(cw / vw, ch / vh);
+            const dw = vw * scale;
+            const dh = vh * scale;
+            const dx = (cw - dw) / 2;
+            const dy = (ch - dh) / 2;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.drawImage(video, dx, dy, dw, dh);
+          }
 
           glamRafRef.current = requestAnimationFrame(drawFrame);
         }
@@ -195,10 +222,10 @@ export default function RecordScreen({ active, glamMode = false }) {
     });
   }, []);
 
-  const stopRotateCanvas = useCallback(() => {
+  const stopMismatchCanvas = useCallback(() => {
     if (glamRafRef.current) { cancelAnimationFrame(glamRafRef.current); glamRafRef.current = null; }
     canvasStreamRef.current = null;
-    rotateCanvasRef.current = null;
+    mismatchCanvasRef.current = null;
   }, []);
 
   /* ── Volume analyser ───────────────────────────────────────────────────── */
@@ -233,11 +260,11 @@ export default function RecordScreen({ active, glamMode = false }) {
   /* ── Stop & cleanup stream ─────────────────────────────────────────────── */
   const stopStream = useCallback(() => {
     stopGlamCanvas();
-    stopRotateCanvas();
+    stopMismatchCanvas();
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current)  { videoRef.current.srcObject = null; }
     stopAnalyser();
-  }, [stopAnalyser, stopGlamCanvas, stopRotateCanvas]);
+  }, [stopAnalyser, stopGlamCanvas, stopMismatchCanvas]);
 
   /* ── Start countdown then record ───────────────────────────────────────── */
   const beginCountdown = useCallback(async () => {
@@ -246,12 +273,7 @@ export default function RecordScreen({ active, glamMode = false }) {
 
     // ── Dynamic hardware mismatch detection ─────────────────────────────────
     // Inspect the actual video track dimensions to detect a real camera-vs-UI
-    // mismatch, regardless of whether we're in Auto, Force Portrait, or Force
-    // Landscape mode. This means:
-    //   • A tablet in Auto mode that physically rotates to Portrait will correctly
-    //     detect that its hardware camera is still delivering Landscape frames.
-    //   • Rotating back to Landscape on the next recording = no mismatch, raw stream.
-    //   • A Force Portrait laptop = detected mismatch every time → canvas applied.
+    // mismatch, regardless of orientationMode (Auto / Force Portrait / Force Landscape).
     let cameraIsLandscape = false;
     if (!isAudioOnly && isPortrait) {
       const videoTrack = rawStream.getVideoTracks()[0];
@@ -263,19 +285,23 @@ export default function RecordScreen({ active, glamMode = false }) {
     // hasMismatch: UI is portrait but camera hardware delivers landscape frames
     const hasMismatch = isPortrait && cameraIsLandscape;
 
-    // Set up preview + choose the stream that MediaRecorder will encode
+    // ── Stream routing ───────────────────────────────────────────────────────
     let recordStream = rawStream;
     if (useGlam) {
       recordStream = await startGlamCanvas(rawStream);
       setIsGlamActive(true);
-    } else if (hasMismatch && (mismatch === 'rotate90cw' || mismatch === 'rotate90ccw')) {
-      // Rotate canvas pipeline: physically saves a portrait file (no CSS trick).
-      // mismatch is forwarded as 'direction' → +Math.PI/2 (CW) or -Math.PI/2 (CCW).
-      recordStream = await startRotateCanvas(rawStream, mismatch);
-      // startRotateCanvas already sets videoRef.current.srcObject to the canvas stream.
+    } else if (hasMismatch) {
+      // ALL mismatch strategies now route through the canvas pipeline so the
+      // MediaRecorder saves a physically correct 720×1280 portrait WebM.
+      //   letterbox  → black bars baked in above/below landscape frame
+      //   centercrop → landscape frame scaled to fill portrait, sides cropped
+      //   rotate90cw → landscape frame rotated +90° to fill portrait
+      //   rotate90ccw→ landscape frame rotated -90° to fill portrait
+      recordStream = await startMismatchCanvas(rawStream, mismatch);
+      // startMismatchCanvas sets videoRef.current.srcObject to the canvas stream.
     } else {
-      // letterbox / centercrop / landscape mode: show raw stream; CSS object-fit handles
-      // the visual display via getPreviewVideoStyle(isPortrait, mismatch).
+      // No mismatch: landscape UI, or portrait UI where camera already delivers
+      // portrait frames — show raw stream directly.
       if (videoRef.current && !isAudioOnly) { videoRef.current.srcObject = rawStream; }
     }
 
@@ -306,7 +332,7 @@ export default function RecordScreen({ active, glamMode = false }) {
       }
     }
     tick();
-  }, [acquireStream, countdownSeconds, useGlam, startGlamCanvas, isPortrait, mismatch, startRotateCanvas, isAudioOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [acquireStream, countdownSeconds, useGlam, startGlamCanvas, isPortrait, mismatch, startMismatchCanvas, isAudioOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Actual MediaRecorder capture ──────────────────────────────────────── */
   function startCapture(rawStream, recordStream) {
@@ -593,16 +619,12 @@ export default function RecordScreen({ active, glamMode = false }) {
           <div className="record-audio-bg" />
         ) : (
           <>
-            {/* Video preview — styled by orientation mode + mismatch setting */}
+            {/* Video preview — canvas stream (or raw stream) fills the container */}
             <video
               ref={videoRef}
               className="record-video"
               autoPlay muted playsInline
-              style={{
-                ...getPreviewVideoStyle(isPortrait, mismatch),
-                // Black background for letterbox so bars look clean
-                background: (isPortrait && mismatch === 'letterbox') ? '#000' : undefined,
-              }}
+              style={getPreviewVideoStyle(isPortrait, mismatch)}
             />
             <div className="record-video-overlay" />
           </>

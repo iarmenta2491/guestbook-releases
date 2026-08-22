@@ -132,10 +132,10 @@ export default function ReviewScreen({ active }) {
                 </button>
               </div>
             ) : (
-              /* ── Video player — shape + fit driven by orientation settings ── */
+              /* ── Video player — portrait or landscape card based on orientation ── */
               <div
                 className="review-video-card"
-                style={getReplayCardStyle(isPortrait, mismatch)}
+                style={getReplayCardStyle(isPortrait)}
               >
                 <video
                   ref={videoRef}
@@ -145,11 +145,7 @@ export default function ReviewScreen({ active }) {
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   playsInline
-                  style={{
-                    ...getReplayVideoStyle(isPortrait, mismatch),
-                    // Black background for letterbox so bars look clean
-                    background: (isPortrait && mismatch === 'letterbox') ? '#000' : undefined,
-                  }}
+                  style={getReplayVideoStyle(isPortrait)}
                 />
                 <button
                   className="review-video-overlay-btn"
