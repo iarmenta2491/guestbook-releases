@@ -117,16 +117,16 @@ export default function ReviewScreen({ active }) {
       {/* Decorative background */}
       <div className="review-bg" />
 
-      {/* ── Main layout: adapts column/row based on orientation ─────────── */}
+      {/* ── Main layout ──────────────────────────────────────────────────── */}
       <div
         className="review-layout"
-        style={isLandscape && !videoIsPortrait ? { flexDirection: 'row' } : undefined}
+        style={isLandscape ? { flexDirection: 'row' } : undefined}
       >
 
-        {/* ── Top/Left: Media area ─────────────────────────────────────── */}
+        {/* ── Media area ───────────────────────────────────────────────── */}
         <div
           className="review-media-area"
-          style={isLandscape && !videoIsPortrait ? { flex: '1 1 auto', padding: '16px 24px 16px 32px' } : undefined}
+          style={isLandscape ? { flex: '1 1 auto', padding: '16px 24px 16px 32px' } : { padding: '16px 20px 8px' }}
         >
           {replayEnabled ? (
             /* ── REPLAY ENABLED: embedded player ──────────────────────── */
@@ -158,12 +158,16 @@ export default function ReviewScreen({ active }) {
             ) : (
               <div
                 className="review-video-card"
-                style={{
-                  // Lock card to actual video aspect ratio
-                  aspectRatio: videoIsPortrait ? '9 / 16' : '16 / 9',
-                  // Portrait video: tall card that fills the available height
-                  height: videoIsPortrait ? '100%' : undefined,
-                  width: videoIsPortrait ? 'auto' : (isLandscape ? '100%' : undefined),
+                style={!isLandscape ? {
+                  // ── Portrait kiosk: fill the media area exactly like the live camera preview
+                  width: '100%',
+                  height: '100%',
+                  aspectRatio: 'unset',
+                } : {
+                  // ── Landscape kiosk: standard 16:9 card
+                  aspectRatio: '16 / 9',
+                  width: '100%',
+                  height: 'auto',
                 }}
               >
                 <video
@@ -178,7 +182,11 @@ export default function ReviewScreen({ active }) {
                     setVideoIsPortrait(v.videoHeight > v.videoWidth);
                   }}
                   playsInline
-                  style={{ objectFit: 'contain' }}
+                  style={{
+                    // Portrait kiosk: cover fills the tall space (same as record screen live preview)
+                    // Landscape kiosk: contain keeps the full frame visible
+                    objectFit: !isLandscape ? 'cover' : 'contain',
+                  }}
                 />
                 {/* Play/pause overlay tap target */}
                 <button
@@ -209,10 +217,10 @@ export default function ReviewScreen({ active }) {
           )}
         </div>
 
-        {/* ── Bottom/Right: Action buttons — always visible ─────────────── */}
+        {/* ── Action buttons — always visible ──────────────────────────── */}
         <div
           className="review-actions-area"
-          style={isLandscape && !videoIsPortrait
+          style={isLandscape
             ? { flex: '0 0 320px', justifyContent: 'center', padding: '24px 32px 24px 16px', background: 'linear-gradient(to left, rgba(7,7,26,0.85) 0%, rgba(7,7,26,0.60) 70%, transparent 100%)' }
             : undefined}
         >
