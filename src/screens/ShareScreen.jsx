@@ -333,37 +333,18 @@ export default function ShareScreen({ active }) {
               )}
             </div>
 
-            {/* QR URL debug block — visible plain text directly under the code */}
+            {/* Wi-Fi instruction badge — shown whenever the QR is ready */}
             {qrUrl && typeof qrUrl === 'string' && qrUrl.startsWith('http') && (
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                width: '100%', maxWidth: 320,
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 16px', borderRadius: 999,
+                background: 'rgba(20,184,166,0.12)',
+                border: '1px solid rgba(20,184,166,0.35)',
+                color: '#2dd4bf',
+                fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.04em',
               }}>
-                {/* Wi-Fi instruction badge */}
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 16px', borderRadius: 999,
-                  background: 'rgba(20,184,166,0.12)',
-                  border: '1px solid rgba(20,184,166,0.35)',
-                  color: '#2dd4bf',
-                  fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.04em',
-                }}>
-                  📶 Connect to the event Wi-Fi, then scan
-                </span>
-
-                {/* Exact URL — readable and copyable */}
-                <p style={{
-                  fontFamily: 'monospace', fontSize: '0.72rem',
-                  color: '#e2e8f0',
-                  background: 'rgba(0,0,0,0.45)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 8, padding: '10px 14px',
-                  width: '100%', wordBreak: 'break-all',
-                  textAlign: 'center', userSelect: 'text', lineHeight: 1.6,
-                }}>
-                  {qrUrl}
-                </p>
-              </div>
+                📶 Connect to the event Wi-Fi, then scan
+              </span>
             )}
 
             <CountdownRing size={72} label={`Link expires in ${countdown}s`} />

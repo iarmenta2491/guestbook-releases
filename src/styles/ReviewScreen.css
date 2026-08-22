@@ -126,8 +126,9 @@
 /* ── VIDEO: embedded player card ──────────────────────────────────────────── */
 .review-video-card {
   position: relative;
+  /* Width/height are set by JS inline style based on video + device orientation.
+     These are the visual-only defaults before JS has detected the video dimensions. */
   width: 100%;
-  max-width: min(90vh * 1.78, 100%);   /* 16:9 max-width based on height */
   height: 100%;
   background: #000;
   border-radius: var(--radius-lg);

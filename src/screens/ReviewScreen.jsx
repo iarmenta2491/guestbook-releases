@@ -159,12 +159,11 @@ export default function ReviewScreen({ active }) {
               <div
                 className="review-video-card"
                 style={{
-                  // Lock the card to the correct aspect ratio based on actual video dimensions
+                  // Lock card to actual video aspect ratio
                   aspectRatio: videoIsPortrait ? '9 / 16' : '16 / 9',
-                  // In landscape device + landscape video: fill the available width
-                  width: isLandscape && !videoIsPortrait ? '100%' : undefined,
-                  // In portrait video: use auto width so aspect-ratio drives the sizing
-                  maxWidth: videoIsPortrait ? 'min(90vh * 0.5625, 100%)' : undefined,
+                  // Portrait video: tall card that fills the available height
+                  height: videoIsPortrait ? '100%' : undefined,
+                  width: videoIsPortrait ? 'auto' : (isLandscape ? '100%' : undefined),
                 }}
               >
                 <video
