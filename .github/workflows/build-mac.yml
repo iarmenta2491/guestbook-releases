@@ -76,13 +76,17 @@ jobs:
       # ── 6. electron-builder macOS DMG ────────────────────────────────────
       # --publish always uploads directly to the GitHub release matching the
       # current package.json version. GH_TOKEN must have repo write scope.
-      - name: Build and publish macOS DMG
+      - name: Build and publish macOS DMG (x64)
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          # Disable code-signing — no Apple Developer certificate on CI.
-          # Users will need to right-click → Open the first time (Gatekeeper bypass).
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --mac --x64 --arm64 --publish always
+        run: npx electron-builder --mac --x64 --publish always
+
+      - name: Build and publish macOS DMG (arm64)
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --mac --arm64 --publish always
 
       # ── 7. Upload artifacts to workflow run (for debugging / manual download)
       - name: Upload DMG as workflow artifact
