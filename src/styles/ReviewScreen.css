@@ -42,8 +42,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px 32px 12px;
-  min-height: 0;          /* lets flex shrink below content height */
-  overflow: hidden;
+  min-height: 0;      /* allows flex to shrink below content height — critical */
+  overflow: hidden;   /* prevents card from escaping bounds in fullscreen */
 }
 
 /* ── Bottom: Action bar — always visible, fixed height ───────────────────── */
@@ -126,11 +126,14 @@
 /* ── VIDEO: embedded player card ──────────────────────────────────────────── */
 .review-video-card {
   position: relative;
-  /* Always 16:9 — the webcam always records landscape.
-     Full width of whatever space the media area provides. */
+  /* Aspect ratio and width/height are set dynamically via inline styles from
+     getReplayCardStyle(isPortrait) in useOrientation.js.
+     Defaults below apply when JS hasn't run yet (SSR / first paint). */
   width: 100%;
   aspect-ratio: 16 / 9;
   height: auto;
+  /* Never exceed the media area — keeps action buttons on-screen in fullscreen. */
+  max-height: 100%;
   background: #000;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -142,9 +145,10 @@
 .review-video {
   width: 100%;
   height: 100%;
-  /* contain: shows the full video, no zoom, no crop.
-     Black bars appear if video and container ratios differ. */
+  /* contain: shows the full video frame — no zoom, no crop, no distortion.
+     Black bars fill any space left over when the video ratio and card ratio differ. */
   object-fit: contain;
+  background: #000;
   display: block;
   border-radius: var(--radius-lg);
 }

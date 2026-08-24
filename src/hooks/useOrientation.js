@@ -55,35 +55,28 @@ export function useOrientation(settings) {
  * getPreviewVideoStyle
  * Inline styles for the live camera <video> in RecordScreen.
  *
- * When hasMismatch is true, startMismatchCanvas() replaces videoRef.srcObject
- * with an already-correct 720×1280 portrait canvas stream, so the video element
- * just needs object-fit:cover to fill the container — no extra transforms.
+ * Always uses object-fit:contain so the full video frame is always visible —
+ * no zoom, no crop, no distortion. The record-root container background is #000
+ * so any letterbox/pillarbox bars are clean black.
  *
- * When hasMismatch is false (camera delivers portrait natively), object-fit:cover
- * fills the portrait container; object-fit:contain is used for letterbox to show
- * black bars if the camera sends a slightly different aspect ratio.
- *
- * No mirroring — the camera is displayed exactly as it sees the scene.
+ * When startMismatchCanvas() is active, the <video> element is already
+ * receiving a correctly-oriented 720×1280 portrait canvas stream, so
+ * contain still shows it full-frame with no wasted pixels in portrait mode.
  */
 export function getPreviewVideoStyle(isPortrait, mismatch) {
-  if (!isPortrait) {
-    // Landscape: fill the screen
-    return { objectFit: 'cover' };
-  }
-  // Portrait: canvas stream is already correctly-formatted — just fill the container.
-  // (CSS letterbox/cover distinction is handled inside the canvas draw loop, not here.)
-  return { objectFit: 'cover' };
+  // object-fit:contain: full frame always visible, black bars fill leftover space.
+  // Works correctly for every combination of orientation and mismatch strategy.
+  return { objectFit: 'contain' };
 }
 
 /**
  * getReplayVideoStyle
  * Inline styles for the replay <video> in ReviewScreen.
  *
- * All portrait recordings go through startMismatchCanvas → physically 720×1280 file.
- * Replay always uses object-fit:contain to show the full frame without any clipping.
+ * object-fit:contain shows the full saved video frame without any clipping,
+ * regardless of whether it is a landscape (16:9) or portrait (9:16) file.
  */
 export function getReplayVideoStyle(isPortrait) {
-  // object-fit:contain works for both landscape (16:9 file) and portrait (9:16 file)
   return { objectFit: 'contain' };
 }
 
@@ -91,14 +84,18 @@ export function getReplayVideoStyle(isPortrait) {
  * getReplayCardStyle
  * Inline styles for the .review-video-card wrapper in ReviewScreen.
  *
- * Landscape → standard 16:9 card.
- * Portrait  → 9:16 card regardless of which mismatch strategy was used,
- *             because the canvas pipeline always saves a 720×1280 portrait file.
+ * Landscape → 16:9 card  (width-driven, height auto)
+ * Portrait  → 9:16 card  (height-driven, width auto)
+ *
+ * maxHeight:'100%' ensures the card never overflows the flex media area in
+ * fullscreen mode — it fills the available height but stops at the screen edge,
+ * keeping the Re-Do / Complete action buttons always on-screen.
  */
 export function getReplayCardStyle(isPortrait) {
   if (!isPortrait) {
-    return { aspectRatio: '16 / 9', width: '100%', height: 'auto' };
+    // Landscape: fill width, let height follow the 16:9 ratio, cap at 100% height
+    return { aspectRatio: '16 / 9', width: '100%', height: 'auto', maxHeight: '100%' };
   }
-  // Portrait: all strategies produce a 9:16 file — display as a tall card
-  return { aspectRatio: '9 / 16', height: '100%', width: 'auto' };
+  // Portrait: fill height, let width follow the 9:16 ratio, cap at 100% width
+  return { aspectRatio: '9 / 16', height: '100%', width: 'auto', maxWidth: '100%' };
 }

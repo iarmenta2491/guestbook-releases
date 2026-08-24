@@ -482,7 +482,7 @@ export default function RecordScreen({ active, glamMode = false }) {
       <style>{`
         .record-root {
           position: absolute; inset: 0; width: 100%; height: 100%;
-          background: var(--bg-primary); display: flex; flex-direction: column;
+          background: #000; display: flex; flex-direction: column;
           align-items: center; justify-content: center;
           opacity: 0; pointer-events: none;
           transition: opacity 600ms var(--ease-out);
@@ -493,7 +493,11 @@ export default function RecordScreen({ active, glamMode = false }) {
         /* Camera preview / canvas preview */
         .record-video {
           position: absolute; inset: 0; width: 100%; height: 100%;
-          object-fit: cover; z-index: 0;
+          /* contain: always shows the full frame — no stretch, no crop.
+             Black bars fill any leftover space when the camera aspect ratio
+             doesn't match the screen (e.g. 16:9 camera on a portrait screen
+             or a 9:16 canvas stream on a landscape screen). */
+          object-fit: contain; background: #000; z-index: 0;
         }
         /* Glam canvas (hidden — we show canvas stream via <video>) */
         .record-glam-canvas { display: none; }
