@@ -336,13 +336,20 @@ app.on('window-all-closed', () => {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280, height: 800,
-    frame: true, backgroundColor: '#08081a', show: true, autoHideMenuBar: true,
+    // Kiosk / fullscreen: hide the OS taskbar and window title bar.
+    // fullscreen:true  — OS-level fullscreen (hides taskbar on Windows,
+    //                    hides menu bar on macOS, fills screen on Linux).
+    // frame:false      — removes the Electron chrome title bar.
+    // Both are skipped in dev mode so the developer can interact normally.
+    frame:      false,
+    fullscreen: !isDev,
+    backgroundColor: '#08081a', show: true, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, nodeIntegration: false, webSecurity: false,
     },
   });
-  mainWindow.maximize();
+  if (isDev) mainWindow.maximize();
   mainWindow.focus();
   if (isDev) mainWindow.loadURL(RENDERER_URL);
   else        mainWindow.loadFile(DIST_HTML);
@@ -353,6 +360,13 @@ function createWindow() {
   });
   mainWindow.on('closed', () => { mainWindow = null; });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IPC — SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Quit the application — called by the Admin Panel 'Exit Application' button. */
+ipcMain.handle('quit-app', () => { app.quit(); });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IPC — EVENT MANAGEMENT

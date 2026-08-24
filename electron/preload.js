@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('guestbook', {
   getAppInfo:      () => ipcRenderer.invoke('get-app-info'),
   getClipCount:    () => ipcRenderer.invoke('get-clip-count'),
   getFileDuration: (filePath) => ipcRenderer.invoke('get-file-duration', filePath),
+  quitApp:         () => ipcRenderer.invoke('quit-app'),
 
   // ── Event Management (NEW) ────────────────────────────────────────────
   /** Returns { events, activeEventId, activeConfig: {settings, clips} } */

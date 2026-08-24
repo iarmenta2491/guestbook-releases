@@ -2057,6 +2057,15 @@ export default function AdminPanel({ active }) {
               }}>Master Access</span>
             )}
             <button className="admin-btn" onClick={() => navigateTo('attract')}>Exit Admin</button>
+            <button
+              className="admin-btn"
+              style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.4)', color: 'var(--rose-400)' }}
+              onClick={() => {
+                if (window.confirm('Are you sure you want to quit the application?')) {
+                  window.guestbook?.quitApp();
+                }
+              }}
+            >⏻ Exit App</button>
           </div>
         </header>
 
@@ -2143,7 +2152,18 @@ export default function AdminPanel({ active }) {
               </span>
             )}
           </div>
-          <button className="admin-btn" onClick={() => navigateTo('attract')}>Exit Admin</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="admin-btn" onClick={() => navigateTo('attract')}>Exit Admin</button>
+            <button
+              className="admin-btn"
+              style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.4)', color: 'var(--rose-400)' }}
+              onClick={() => {
+                if (window.confirm('Are you sure you want to quit the application?')) {
+                  window.guestbook?.quitApp();
+                }
+              }}
+            >⏻ Exit App</button>
+          </div>
         </footer>
       </div>
 
