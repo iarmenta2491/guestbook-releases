@@ -1321,6 +1321,11 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
               </>
             )}
             <button className="admin-btn small primary" onClick={handleImportExternal}>⬆ Import Media</button>
+            <button
+              className="admin-btn small"
+              onClick={() => window.guestbook?.openClipsFolder()}
+              title="Open the save folder in File Explorer"
+            >📂 Open Save Folder</button>
           </div>
         </div>
         {/* Clip grid */}
