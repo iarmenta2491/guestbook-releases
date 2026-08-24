@@ -145,6 +145,8 @@ export default function ReviewScreen({ active }) {
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   playsInline
+                  // eslint-disable-next-line react/no-unknown-property
+                  webkitPlaysInline={true}
                   style={getReplayVideoStyle(isPortrait)}
                 />
                 <button

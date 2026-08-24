@@ -8,6 +8,48 @@ function formatTime(seconds) { return `${pad(Math.floor(seconds / 60))}:${pad(se
 
 const VOLUME_BAR_COUNT = 16;
 
+/**
+ * pickMimeType — returns the best MediaRecorder MIME type this browser supports.
+ *
+ * Priority order:
+ *   1. WebM + VP9 + Opus  (Chromium / Electron — best quality)
+ *   2. WebM + VP8 + Opus  (Chromium fallback)
+ *   3. WebM               (Chromium basic)
+ *   4. MP4 + H.264 + AAC  (Safari / WebKit — required on iOS/macOS Safari)
+ *   5. MP4                (Safari basic fallback)
+ *   6. ''                 (let the browser choose)
+ *
+ * Returns a string (possibly '') — pass to `new MediaRecorder(stream, { mimeType })`.
+ */
+function pickMimeType(isAudioOnly) {
+  if (isAudioOnly) {
+    const audioCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', ''];
+    return audioCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
+  }
+  const videoCandidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4;codecs=avc1,mp4a.40.2', // Safari / WebKit
+    'video/mp4',
+    '',
+  ];
+  return videoCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
+}
+
+/**
+ * SUPPORTS_CANVAS_FILTER — true in Chromium, false in Safari < 18.
+ * Used to skip the ctx.filter assignment gracefully on WebKit so we don't
+ * show the GLAM badge for an effect that has no visible impact.
+ */
+const SUPPORTS_CANVAS_FILTER = (() => {
+  try {
+    const ctx = document.createElement('canvas').getContext('2d');
+    return ctx != null && typeof ctx.filter === 'string';
+  } catch { return false; }
+})();
+
+
 /* ─── Component ──────────────────────────────────────────────────────────── */
 export default function RecordScreen({ active, glamMode = false }) {
   const { navigateTo, settings, startRecording } = useApp();
@@ -29,10 +71,11 @@ export default function RecordScreen({ active, glamMode = false }) {
   const videoRef        = useRef(null);   // preview <video> (camera or canvas)
   const canvasRef       = useRef(null);   // offscreen canvas for glam filter
   const streamRef       = useRef(null);   // raw camera stream
-  const canvasStreamRef = useRef(null);   // canvas.captureStream() for GLAM
-  const glamRafRef      = useRef(null);   // requestAnimationFrame handle for glam loop
+  const canvasStreamRef = useRef(null);   // canvas.captureStream() for GLAM/mismatch
+  const glamRafRef      = useRef(null);   // requestAnimationFrame handle for canvas loop
   const recorderRef     = useRef(null);
   const chunksRef       = useRef([]);
+  const mimeTypeRef     = useRef('');     // actual MIME type used by this MediaRecorder instance
   const elapsedTimerRef = useRef(null);
   const maxDurTimerRef  = useRef(null);
   const analyserRef     = useRef(null);
@@ -99,6 +142,7 @@ export default function RecordScreen({ active, glamMode = false }) {
     if (!canvas) return Promise.resolve(rawStream);
     const video = document.createElement('video');
     video.srcObject = rawStream; video.muted = true; video.playsInline = true;
+    video.setAttribute('webkit-playsinline', ''); // iOS Safari <10 compat
     return new Promise((resolve) => {
       video.onloadedmetadata = () => {
         canvas.width  = video.videoWidth  || 1280;
@@ -107,14 +151,23 @@ export default function RecordScreen({ active, glamMode = false }) {
         function drawFrame() {
           if (!canvas || !ctx) return;
           const w = canvas.width, h = canvas.height;
-          // No mirroring — draw raw frame with GLAM colour grading only
-          ctx.filter = 'contrast(1.06) brightness(1.08) saturate(1.1)';
+          // SUPPORTS_CANVAS_FILTER: true on Chromium, false on Safari < 18.
+          // On unsupported engines draw the raw frame — recording still works,
+          // but without colour grading (GLAM badge won't appear, see below).
+          if (SUPPORTS_CANVAS_FILTER) {
+            ctx.filter = 'contrast(1.06) brightness(1.08) saturate(1.1)';
+          }
           ctx.clearRect(0, 0, w, h);
           ctx.drawImage(video, 0, 0, w, h);
-          ctx.filter = 'none';
+          if (SUPPORTS_CANVAS_FILTER) { ctx.filter = 'none'; }
           glamRafRef.current = requestAnimationFrame(drawFrame);
         }
         glamRafRef.current = requestAnimationFrame(drawFrame);
+
+        // captureStream() is supported in Safari 11+, Chromium, Firefox.
+        // Guard defensively in case the API is missing.
+        if (!canvas.captureStream) { resolve(rawStream); return; }
+
         const audioTracks = rawStream.getAudioTracks();
         const canvasStream = canvas.captureStream(30);
         audioTracks.forEach(t => canvasStream.addTrack(t));
@@ -124,6 +177,8 @@ export default function RecordScreen({ active, glamMode = false }) {
       };
       video.play().catch(() => resolve(rawStream));
     });
+  // setIsGlamActive is called by beginCountdown only when SUPPORTS_CANVAS_FILTER is true
+  // (guarded there), so the GLAM badge only shows when the filter actually ran.
   }, []);
 
   const stopGlamCanvas = useCallback(() => {
@@ -211,6 +266,9 @@ export default function RecordScreen({ active, glamMode = false }) {
 
         glamRafRef.current = requestAnimationFrame(drawFrame);
 
+        // captureStream() guard — fall back to rawStream if API is absent
+        if (!canvas.captureStream) { resolve(rawStream); return; }
+
         const audioTracks = rawStream.getAudioTracks();
         const canvasStream = canvas.captureStream(30);
         audioTracks.forEach(t => canvasStream.addTrack(t));
@@ -289,7 +347,9 @@ export default function RecordScreen({ active, glamMode = false }) {
     let recordStream = rawStream;
     if (useGlam) {
       recordStream = await startGlamCanvas(rawStream);
-      setIsGlamActive(true);
+      // Only show the GLAM badge if ctx.filter is supported (Chromium / Safari 18+).
+      // On Safari < 18 the canvas still records correctly but without the colour grade.
+      if (SUPPORTS_CANVAS_FILTER) setIsGlamActive(true);
     } else if (hasMismatch) {
       // ALL mismatch strategies now route through the canvas pipeline so the
       // MediaRecorder saves a physically correct 720×1280 portrait WebM.
@@ -337,18 +397,22 @@ export default function RecordScreen({ active, glamMode = false }) {
   /* ── Actual MediaRecorder capture ──────────────────────────────────────── */
   function startCapture(rawStream, recordStream) {
     chunksRef.current = [];
+    mimeTypeRef.current = '';
     // Use raw stream for analyser (it has the raw audio data)
     startAnalyser(rawStream);
 
     const streamToRecord = recordStream || rawStream;
-    const mimeType = isAudioOnly
-      ? (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '')
-      : (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus'
-          : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '');
 
-    const recorderOptions = mimeType ? { mimeType } : {};
+    // pickMimeType() probes candidates in priority order:
+    //   WebM+VP9 / WebM+VP8 / WebM (Chromium/Electron)
+    //   MP4+H.264+AAC / MP4          (Safari / WebKit)
+    const preferredMime = pickMimeType(isAudioOnly);
+    const recorderOptions = preferredMime ? { mimeType: preferredMime } : {};
     const recorder = new MediaRecorder(streamToRecord, recorderOptions);
     recorderRef.current = recorder;
+
+    // Capture the actual MIME type the recorder is using (may differ from preferred)
+    mimeTypeRef.current = recorder.mimeType || preferredMime;
 
     recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
     recorder.start(250);
@@ -367,7 +431,10 @@ export default function RecordScreen({ active, glamMode = false }) {
     const recorder = recorderRef.current;
     if (!recorder || recorder.state === 'inactive') { stopStream(); navigateTo('review'); return; }
     recorder.onstop = () => {
-      const blobType = isAudioOnly ? 'audio/webm' : 'video/webm';
+      // Use the actual MIME type recorded (video/webm on Chromium, video/mp4 on Safari).
+      // This ensures the Blob's Content-Type matches the container bytes.
+      const blobType = mimeTypeRef.current
+        || (isAudioOnly ? 'audio/webm' : 'video/webm'); // final fallback
       const blob = new Blob(chunksRef.current, { type: blobType });
       startRecording(blob);
       stopStream();
@@ -624,6 +691,8 @@ export default function RecordScreen({ active, glamMode = false }) {
               ref={videoRef}
               className="record-video"
               autoPlay muted playsInline
+              // eslint-disable-next-line react/no-unknown-property
+              webkitPlaysInline={true}
               style={getPreviewVideoStyle(isPortrait, mismatch)}
             />
             <div className="record-video-overlay" />

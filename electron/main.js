@@ -509,28 +509,33 @@ ipcMain.handle('save-recording', async (_, { buffer, filename }) => {
     }
     if (!fs.existsSync(clipsDir)) fs.mkdirSync(clipsDir, { recursive: true });
 
-    // Step 1: Write raw WebM to disk
-    const rawWebmPath = path.join(clipsDir, filename);
+    // Step 1: Write raw recorder output to a temporary path.
+    // Use a _raw suffix so the path never collides with the final .mp4 output,
+    // regardless of whether the renderer sent .webm (Chromium) or .mp4 (Safari).
+    const rawExt     = path.extname(filename) || '.webm';
+    const rawBaseName = path.basename(filename, rawExt) + '_raw' + rawExt;
+    const rawWebmPath = path.join(clipsDir, rawBaseName);
     fs.writeFileSync(rawWebmPath, Buffer.from(buffer));
-    console.log('[Save] Raw WebM written:', path.basename(rawWebmPath));
+    console.log('[Save] Raw recording written:', path.basename(rawWebmPath));
 
     // Step 2: Transcode to iOS-compatible H.264 MP4 (awaited)
-    const mp4Filename  = filename.replace(/\.webm$/i, '.mp4');
-    const mp4Path      = path.join(clipsDir, mp4Filename);
-    const transcoded   = await generateMobileMP4(rawWebmPath, mp4Path);
+    // Strip any extension and produce .mp4 — FFmpeg reads container by content, not name.
+    const mp4Filename = filename.replace(/\.[^.]+$/, '') + '.mp4';
+    const mp4Path     = path.join(clipsDir, mp4Filename);
+    const transcoded  = await generateMobileMP4(rawWebmPath, mp4Path);
 
     let finalPath, finalFilename;
     if (transcoded) {
-      // Step 3: Delete temp WebM, use the MP4
+      // Step 3: Delete raw temp file, use the transcoded MP4
       try { fs.unlinkSync(rawWebmPath); } catch (_) {}
       finalPath     = mp4Path;
       finalFilename = mp4Filename;
       console.log('[Save] ✅ MP4 ready:', path.basename(finalPath));
     } else {
-      // FFmpeg unavailable — fall back to the raw WebM
+      // FFmpeg unavailable — fall back to the raw file (may be webm or mp4)
       finalPath     = rawWebmPath;
-      finalFilename = filename;
-      console.warn('[Save] ⚠️ FFmpeg failed — keeping WebM fallback');
+      finalFilename = rawBaseName;
+      console.warn('[Save] ⚠️ FFmpeg failed — keeping raw file fallback');
     }
 
     const clip = {

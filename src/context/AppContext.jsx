@@ -154,7 +154,13 @@ export function AppProvider({ children }) {
       const dateStr  = now.toISOString().slice(0, 10);
       const timeStr  = now.toTimeString().slice(0, 8).replace(/:/g, '-');
       const eventSlug = (settings.eventName || 'GuestBook').replace(/\s+/g, '_').slice(0, 20);
-      const filename = `${eventSlug}_${dateStr}_${timeStr}_G${session.guestNumber}.webm`;
+      // Derive the file extension from the Blob's actual MIME type:
+      //   video/webm → .webm  (Chromium / Electron)
+      //   video/mp4  → .mp4   (Safari / WebKit)
+      //   audio/*    → same logic but for audio
+      const blobMime = session.recordingBlob.type || '';
+      const ext      = blobMime.includes('mp4') ? 'mp4' : 'webm';
+      const filename = `${eventSlug}_${dateStr}_${timeStr}_G${session.guestNumber}.${ext}`;
 
       // Note: settings no longer sent — main.js reads them from the active event config
       const result = await window.guestbook.saveRecording(buf, filename);
