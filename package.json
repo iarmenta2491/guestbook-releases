@@ -64,20 +64,17 @@
             "!**/*.md",
             "!**/.git/**"
         ],
-        "extraResources": {
-            "from": "assets",
-            "to": "assets",
-            "filter": [
-                "**/*"
-            ]
-        },
         "asarUnpack": [
-            "node_modules/ffmpeg-static/**/*",
-            "pipeline/**/*",
-            "engine/**/*",
-            "electron/**/*"
+            "node_modules/ffmpeg-static/**/*"
         ],
         "win": {
+            "extraResources": [
+                {
+                    "from": "assets",
+                    "to": "assets",
+                    "filter": ["**/*"]
+                }
+            ],
             "target": [
                 {
                     "target": "nsis",
