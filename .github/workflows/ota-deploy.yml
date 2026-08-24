@@ -1,0 +1,44 @@
+name: Deploy OTA Web Bundle
+
+# Builds the Vite frontend and uploads it as a dist.zip asset
+# to the latest GitHub release. The mobile app's self-hosted OTA
+# updater checks this asset on launch and hot-swaps web assets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to attach the OTA bundle to (e.g. v1.4.0)'
+        required: true
+
+jobs:
+  build-and-upload:
+    name: Build & Upload OTA Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build Vite frontend
+        run: npm run build
+
+      - name: Create OTA bundle ZIP
+        run: cd dist && zip -r ../dist.zip . && cd ..
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh release upload ${{ inputs.release_tag }} dist.zip \
+            --clobber \
+            --repo ${{ github.repository }}

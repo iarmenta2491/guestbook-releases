@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useOrientation, getPreviewVideoStyle } from '../hooks/useOrientation';
+import { isMobile } from '../services/platform';
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -27,6 +28,8 @@ function pickMimeType(isAudioOnly) {
     return audioCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
   }
   const videoCandidates = [
+    // WebM is checked first. On iOS WebView, isTypeSupported returns false for WebM,
+    // gracefully falling back to MP4 which is required on iOS.
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',
@@ -138,6 +141,10 @@ export default function RecordScreen({ active, glamMode = false }) {
   // Returns Promise<MediaStream>: resolves to canvas-captured stream after
   // loadedmetadata fires and rAF draw loop is queued.
   const startGlamCanvas = useCallback((rawStream) => {
+    // Skip GLAM canvas filter on mobile — WebView canvas performance is too slow for
+    // real-time ctx.filter at 30fps. The visual difference is minimal on mobile screens.
+    if (isMobile() && !SUPPORTS_CANVAS_FILTER) return Promise.resolve(rawStream);
+
     const canvas = canvasRef.current;
     if (!canvas) return Promise.resolve(rawStream);
     const video = document.createElement('video');
@@ -169,7 +176,8 @@ export default function RecordScreen({ active, glamMode = false }) {
         if (!canvas.captureStream) { resolve(rawStream); return; }
 
         const audioTracks = rawStream.getAudioTracks();
-        const canvasStream = canvas.captureStream(30);
+        const fps = isMobile() ? 24 : 30;
+        const canvasStream = canvas.captureStream(fps);
         audioTracks.forEach(t => canvasStream.addTrack(t));
         canvasStreamRef.current = canvasStream;
         if (videoRef.current) { videoRef.current.srcObject = canvasStream; }
@@ -270,7 +278,8 @@ export default function RecordScreen({ active, glamMode = false }) {
         if (!canvas.captureStream) { resolve(rawStream); return; }
 
         const audioTracks = rawStream.getAudioTracks();
-        const canvasStream = canvas.captureStream(30);
+        const fps = isMobile() ? 24 : 30;
+        const canvasStream = canvas.captureStream(fps);
         audioTracks.forEach(t => canvasStream.addTrack(t));
         canvasStreamRef.current = canvasStream;
         if (videoRef.current) { videoRef.current.srcObject = canvasStream; }

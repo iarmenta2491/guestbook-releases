@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 
 # Build output
@@ -41,3 +41,8 @@ assets/whisper/*.bin
 debug_output.txt
 err.txt
 out.txt
+
+# Capacitor native projects (regenerated via npx cap add)
+ios/
+android/
+capacitor.config.d.ts

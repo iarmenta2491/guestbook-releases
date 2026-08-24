@@ -7,6 +7,7 @@ import '@fontsource/outfit/600.css';
 import '@fontsource/outfit/700.css';
 import '@fontsource/outfit/800.css';
 import './styles/global.css';
+import './styles/mobile.css';
 import App from './App';
 
 const container = document.getElementById('root');

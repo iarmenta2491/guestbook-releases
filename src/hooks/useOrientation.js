@@ -20,6 +20,7 @@
  * has no effect on replay styles — the replay always gets a portrait file.
  */
 import { useState, useEffect } from 'react';
+import { isMobile } from '../services/platform';
 
 // ── Main hook ──────────────────────────────────────────────────────────────
 export function useOrientation(settings) {
@@ -44,6 +45,27 @@ export function useOrientation(settings) {
     setIsPortrait(!mq.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, [mode]);
+
+  // Native orientation locking on mobile
+  useEffect(() => {
+    if (!isMobile()) return;
+    
+    const lockOrientation = async () => {
+      try {
+        const { ScreenOrientation } = await import('@capacitor/screen-orientation');
+        if (mode === 'landscape') {
+          await ScreenOrientation.lock({ orientation: 'landscape' });
+        } else if (mode === 'portrait') {
+          await ScreenOrientation.lock({ orientation: 'portrait' });
+        } else {
+          await ScreenOrientation.unlock();
+        }
+      } catch (e) {
+        console.warn('Screen orientation lock failed:', e);
+      }
+    };
+    lockOrientation();
   }, [mode]);
 
   return { isPortrait, mismatch };

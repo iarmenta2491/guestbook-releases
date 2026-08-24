@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { ReactSortable } from 'react-sortablejs';
 import EventModal from './EventModal';
+import { isMobile, hasFFmpeg, hasTranscription } from '../services/platform';
 import '../styles/admin.css';
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -514,12 +515,14 @@ function TabEventSettings({ draft, setDraft }) {
           <div className="settings-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>🤖</span> AI Options &amp; Settings
           </div>
-          <Toggle
-            value={draft.enableTranscription !== false}
-            onChange={v => setDraft(d => ({ ...d, enableTranscription: v }))}
-            label="Offline AI Transcriptions (Whisper)"
-            description="Automatically transcribe each recording using the local Whisper model after it is saved. Requires FFmpeg and the Whisper model file."
-          />
+          {hasTranscription() && (
+            <Toggle
+              value={draft.enableTranscription !== false}
+              onChange={v => setDraft(d => ({ ...d, enableTranscription: v }))}
+              label="Offline AI Transcriptions (Whisper)"
+              description="Automatically transcribe each recording using the local Whisper model after it is saved. Requires FFmpeg and the Whisper model file."
+            />
+          )}
           <Toggle
             value={draft.enableSentiment !== false}
             onChange={v => setDraft(d => ({ ...d, enableSentiment: v }))}
@@ -729,7 +732,9 @@ function TabEventSettings({ draft, setDraft }) {
       </div>
 
       {/* ── App Updates ─────────────────────────────────────────────────── */}
-      <AppUpdatesCard />
+      {!isMobile() && (
+        <AppUpdatesCard />
+      )}
     </div>
   );
 }
@@ -1321,11 +1326,19 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
               </>
             )}
             <button className="admin-btn small primary" onClick={handleImportExternal}>⬆ Import Media</button>
-            <button
-              className="admin-btn small"
-              onClick={() => window.guestbook?.openClipsFolder()}
-              title="Open the save folder in File Explorer"
-            >📂 Open Save Folder</button>
+            {isMobile() ? (
+              <button
+                className="admin-btn small"
+                onClick={() => window.guestbook?.openClipsFolder?.()}
+                title="Share Clips"
+              >📤 Share Clips</button>
+            ) : (
+              <button
+                className="admin-btn small"
+                onClick={() => window.guestbook?.openClipsFolder()}
+                title="Open the save folder in File Explorer"
+              >📂 Open Save Folder</button>
+            )}
           </div>
         </div>
         {/* Clip grid */}
@@ -1360,40 +1373,44 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
         </div>
       </div>
 
-      {/* ── Sticky Action Bar (Compile / Export / Quality) ──────────────── */}
-      <div className="ed-sticky-bar">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>🎬 Timeline</span>
-          <span style={{ fontSize: '0.82rem', color: 'var(--teal-400)', fontWeight: 600 }}>
-            {clipCount} clip{clipCount !== 1 ? 's' : ''} · {formatDuration(totalDuration)} total
-            {exportStatus && <span style={{ marginLeft: 10, color: exportStatus.startsWith('Error') ? 'var(--rose-400)' : 'var(--green-400)' }}>· {exportStatus}</span>}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="admin-btn small" onClick={() => setShowIntroEditor(true)}
-            style={{ borderColor: hasIntro ? 'var(--teal-400)' : undefined, color: hasIntro ? 'var(--teal-400)' : undefined }}>
-            {hasIntro ? '✓ Intro' : '+ Intro'}
-          </button>
-          <button className="admin-btn small" onClick={() => setShowOutroEditor(true)}
-            style={{ borderColor: hasOutro ? 'var(--teal-400)' : undefined, color: hasOutro ? 'var(--teal-400)' : undefined }}>
-            {hasOutro ? '✓ Outro' : '+ Outro'}
-          </button>
-          <button className="admin-btn small" onClick={() => { setTimeline([]); setTransitions([]); setTransitionDurations([]); setTrimMap({}); setHasIntro(false); setHasOutro(false); }}>Clear</button>
-          <select className="admin-select" style={{ width: 120, padding: '6px 10px' }} value={quality} onChange={e => setQuality(e.target.value)}>
-            <option value="1080p">1080p Full HD</option>
-            <option value="720p">720p Fast</option>
-          </select>
-          <button className="admin-btn primary small" disabled={exporting || timeline.length === 0} onClick={handleExport}>
-            {exporting ? `Compiling ${exportProgress.toFixed(0)}%…` : 'Compile & Export'}
-          </button>
-        </div>
-      </div>
+      {hasFFmpeg() && (
+        <>
+          {/* ── Sticky Action Bar (Compile / Export / Quality) ──────────────── */}
+          <div className="ed-sticky-bar">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>🎬 Timeline</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--teal-400)', fontWeight: 600 }}>
+                {clipCount} clip{clipCount !== 1 ? 's' : ''} · {formatDuration(totalDuration)} total
+                {exportStatus && <span style={{ marginLeft: 10, color: exportStatus.startsWith('Error') ? 'var(--rose-400)' : 'var(--green-400)' }}>· {exportStatus}</span>}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="admin-btn small" onClick={() => setShowIntroEditor(true)}
+                style={{ borderColor: hasIntro ? 'var(--teal-400)' : undefined, color: hasIntro ? 'var(--teal-400)' : undefined }}>
+                {hasIntro ? '✓ Intro' : '+ Intro'}
+              </button>
+              <button className="admin-btn small" onClick={() => setShowOutroEditor(true)}
+                style={{ borderColor: hasOutro ? 'var(--teal-400)' : undefined, color: hasOutro ? 'var(--teal-400)' : undefined }}>
+                {hasOutro ? '✓ Outro' : '+ Outro'}
+              </button>
+              <button className="admin-btn small" onClick={() => { setTimeline([]); setTransitions([]); setTransitionDurations([]); setTrimMap({}); setHasIntro(false); setHasOutro(false); }}>Clear</button>
+              <select className="admin-select" style={{ width: 120, padding: '6px 10px' }} value={quality} onChange={e => setQuality(e.target.value)}>
+                <option value="1080p">1080p Full HD</option>
+                <option value="720p">720p Fast</option>
+              </select>
+              <button className="admin-btn primary small" disabled={exporting || timeline.length === 0} onClick={handleExport}>
+                {exporting ? `Compiling ${exportProgress.toFixed(0)}%…` : 'Compile & Export'}
+              </button>
+            </div>
+          </div>
 
-      {/* Progress bar — shown below sticky bar while exporting */}
-      {exporting && (
-        <div className="progress-bar-bg" style={{ borderRadius: 0, margin: '0 0 4px' }}>
-          <div className="progress-bar-fill" style={{ width: `${exportProgress}%` }} />
-        </div>
+          {/* Progress bar — shown below sticky bar while exporting */}
+          {exporting && (
+            <div className="progress-bar-bg" style={{ borderRadius: 0, margin: '0 0 4px' }}>
+              <div className="progress-bar-fill" style={{ width: `${exportProgress}%` }} />
+            </div>
+          )}
+        </>
       )}
 
       {/* Bottom Timeline */}
@@ -2062,15 +2079,17 @@ export default function AdminPanel({ active }) {
               }}>Master Access</span>
             )}
             <button className="admin-btn" onClick={() => navigateTo('attract')}>Exit Admin</button>
-            <button
-              className="admin-btn"
-              style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.4)', color: 'var(--rose-400)' }}
-              onClick={() => {
-                if (window.confirm('Are you sure you want to quit the application?')) {
-                  window.guestbook?.quitApp();
-                }
-              }}
-            >⏻ Exit App</button>
+            {!isMobile() && (
+              <button
+                className="admin-btn"
+                style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.4)', color: 'var(--rose-400)' }}
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to quit the application?')) {
+                    window.guestbook?.quitApp();
+                  }
+                }}
+              >⏻ Exit App</button>
+            )}
           </div>
         </header>
 
@@ -2159,15 +2178,17 @@ export default function AdminPanel({ active }) {
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button className="admin-btn" onClick={() => navigateTo('attract')}>Exit Admin</button>
-            <button
-              className="admin-btn"
-              style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.4)', color: 'var(--rose-400)' }}
-              onClick={() => {
-                if (window.confirm('Are you sure you want to quit the application?')) {
-                  window.guestbook?.quitApp();
-                }
-              }}
-            >⏻ Exit App</button>
+            {!isMobile() && (
+              <button
+                className="admin-btn"
+                style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(244,63,94,0.4)', color: 'var(--rose-400)' }}
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to quit the application?')) {
+                    window.guestbook?.quitApp();
+                  }
+                }}
+              >⏻ Exit App</button>
+            )}
           </div>
         </footer>
       </div>

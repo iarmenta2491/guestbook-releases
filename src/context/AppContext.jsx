@@ -1,8 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { isElectron, isCapacitor, isMobile, hasFFmpeg, hasTranscription } from '../services/platform';
+import capacitorBridge from '../services/capacitorBridge';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
+/** Returns the platform-appropriate API bridge */
+function getBridge() {
+  if (isElectron()) return window.guestbook;
+  if (isCapacitor()) return capacitorBridge;
+  return null;
+}
 // ── Default settings ─────────────────────────────────────────────────────
 export const DEFAULT_SETTINGS = {
   pin: '1234',
@@ -78,10 +86,11 @@ export function AppProvider({ children }) {
   // ── Load everything on mount ──────────────────────────────────────────
   useEffect(() => {
     async function load() {
-      if (!window.guestbook) return;
+      const bridge = getBridge();
+      if (!bridge) return;
       try {
         // Load event registry + active event config in one call
-        const res = await window.guestbook.getEvents();
+        const res = await bridge.getEvents();
         if (res) {
           setEvents(res.events || []);
           setActiveEventId(res.activeEventId || null);
@@ -93,8 +102,8 @@ export function AppProvider({ children }) {
       } catch (e) {
         // Fallback: load settings + clips individually (legacy path)
         console.warn('getEvents failed, falling back to legacy load:', e);
-        try { const s = await window.guestbook.getSettings(); if (s) setSettings({ ...DEFAULT_SETTINGS, ...s }); } catch (_) {}
-        try { const c = await window.guestbook.getClips();    if (c) setClips(c); }                                catch (_) {}
+        try { const s = await bridge.getSettings(); if (s) setSettings({ ...DEFAULT_SETTINGS, ...s }); } catch (_) {}
+        try { const c = await bridge.getClips();    if (c) setClips(c); }                                catch (_) {}
       }
     }
     load();
@@ -102,8 +111,9 @@ export function AppProvider({ children }) {
 
   // ── Ctrl+Shift+A → admin shortcut ──────────────────────────────────
   useEffect(() => {
-    if (!window.guestbook) return;
-    const unsub = window.guestbook.onOpenAdmin(() => {
+    const bridge = getBridge();
+    if (!bridge) return;
+    const unsub = bridge.onOpenAdmin(() => {
       if (screen !== 'admin') navigateTo('admin');
     });
     return unsub;
@@ -123,8 +133,9 @@ export function AppProvider({ children }) {
     if (newClips)    setClips(newClips);
     if (event)       setActiveEventId(event.id);
     // Re-fetch the full annotated event list (clip counts may have changed)
-    if (window.guestbook) {
-      window.guestbook.getEvents().then(res => {
+    const bridge = getBridge();
+    if (bridge) {
+      bridge.getEvents().then(res => {
         if (res) {
           setEvents(res.events || []);
           setActiveEventId(res.activeEventId || null);
@@ -163,12 +174,13 @@ export function AppProvider({ children }) {
       const filename = `${eventSlug}_${dateStr}_${timeStr}_G${session.guestNumber}.${ext}`;
 
       // Note: settings no longer sent — main.js reads them from the active event config
-      const result = await window.guestbook.saveRecording(buf, filename);
-      if (result.ok) {
+      const bridge = getBridge();
+      const result = await bridge?.saveRecording(buf, filename);
+      if (result?.ok) {
         setSession(prev => ({ ...prev, savedClipPath: result.path, savedClipId: result.clipId }));
         setSession(prev => ({ ...prev, guestNumber: prev.guestNumber + 1 }));
         if (result.clipId && settings.enableTranscription !== false) {
-          setTimeout(() => window.guestbook.transcribeClip(result.clipId).catch(() => {}), 1000);
+          setTimeout(() => bridge?.transcribeClip(result.clipId).catch(() => {}), 1000);
         }
         return result;
       }
@@ -177,8 +189,9 @@ export function AppProvider({ children }) {
   }, [session.recordingBlob, session.guestNumber, settings]);
 
   const refreshClips = useCallback(async () => {
-    if (window.guestbook) {
-      const c = await window.guestbook.getClips();
+    const bridge = getBridge();
+    if (bridge) {
+      const c = await bridge.getClips();
       setClips(c || []);
     }
   }, []);
@@ -186,7 +199,8 @@ export function AppProvider({ children }) {
   const updateSettings = useCallback(async (newSettings) => {
     const merged = { ...settings, ...newSettings };
     setSettings(merged);
-    if (window.guestbook) await window.guestbook.saveSettings(merged);
+    const bridge = getBridge();
+    if (bridge) await bridge.saveSettings(merged);
   }, [settings]);
 
   return (
@@ -200,6 +214,7 @@ export function AppProvider({ children }) {
       reloadFromEvent,
       session,      setSession,
       startRecording, saveRecording, resetSession,
+      isElectron, isCapacitor, isMobile, hasFFmpeg, hasTranscription,
     }}>
       {children}
     </AppContext.Provider>
