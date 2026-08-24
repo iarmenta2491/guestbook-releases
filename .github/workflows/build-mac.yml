@@ -1,0 +1,97 @@
+﻿name: Build macOS DMG
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Triggers:
+#   1. workflow_dispatch — run manually from the GitHub Actions tab at any time,
+#      optionally targeting a specific release tag.
+#   2. push of a v* tag — automatically build when a new version tag is pushed.
+# ──────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach assets to (e.g. v1.3.0). Leave blank to use the latest release.'
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-mac:
+    name: Build macOS DMG (x64 + arm64)
+    runs-on: macos-latest
+
+    steps:
+      # ── 1. Checkout source ────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Node.js setup ──────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Install dependencies ───────────────────────────────────────────
+      # --ignore-scripts prevents the postinstall model download on CI
+      - name: Install npm dependencies
+        run: npm ci --ignore-scripts
+
+      # ── 4. Convert icon.ico → icon.icns ──────────────────────────────────
+      # macOS ships with sips (scalar image processor) and iconutil.
+      # We extract the largest frame from the .ico as a PNG, scale it to all
+      # required icon sizes, then package them into a proper .icns bundle.
+      - name: Generate icon.icns from icon.ico
+        run: |
+          mkdir -p /tmp/MyGuestbook.iconset
+
+          # Convert .ico -> .png using sips (picks the best frame automatically)
+          sips -s format png build-resources/icon.ico --out /tmp/icon_source.png || \
+            cp build-resources/icon.ico /tmp/icon_source.png
+
+          # Generate all required icon sizes
+          sips -z 16   16   /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_16x16.png
+          sips -z 32   32   /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_16x16@2x.png
+          sips -z 32   32   /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_32x32.png
+          sips -z 64   64   /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_32x32@2x.png
+          sips -z 128  128  /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_128x128.png
+          sips -z 256  256  /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_128x128@2x.png
+          sips -z 256  256  /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_256x256.png
+          sips -z 512  512  /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_256x256@2x.png
+          sips -z 512  512  /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_512x512.png
+          sips -z 1024 1024 /tmp/icon_source.png --out /tmp/MyGuestbook.iconset/icon_512x512@2x.png
+
+          # Package into .icns
+          iconutil -c icns /tmp/MyGuestbook.iconset -o build-resources/icon.icns
+          echo "icon.icns generated: $(du -sh build-resources/icon.icns)"
+
+      # ── 5. Vite production build ──────────────────────────────────────────
+      - name: Build Vite frontend
+        run: npm run build
+
+      # ── 6. electron-builder macOS DMG ────────────────────────────────────
+      # --publish always uploads directly to the GitHub release matching the
+      # current package.json version. GH_TOKEN must have repo write scope.
+      - name: Build and publish macOS DMG
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Disable code-signing — no Apple Developer certificate on CI.
+          # Users will need to right-click → Open the first time (Gatekeeper bypass).
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ''
+        run: npx electron-builder --mac --x64 --arm64 --publish always
+
+      # ── 7. Upload artifacts to workflow run (for debugging / manual download)
+      - name: Upload DMG as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: |
+            release/*.dmg
+            release/latest-mac.yml
+          if-no-files-found: warn
+          retention-days: 14

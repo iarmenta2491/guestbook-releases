@@ -11,6 +11,8 @@
         "start": "npm run build && electron .",
         "dist": "npm run build && electron-builder --win --x64",
         "dist:dir": "npm run build && electron-builder --win --x64 --dir",
+        "dist:mac": "npm run build && electron-builder --mac --x64 --arm64",
+        "dist:mac:publish": "npm run build && electron-builder --mac --x64 --arm64 --publish always",
         "postinstall": "node scripts/download-model.js"
     },
     "keywords": [],
@@ -109,7 +111,27 @@
                 "repo": "guestbook-releases",
                 "releaseType": "release"
             }
-        ]
+        ],
+        "mac": {
+            "target": [
+                { "target": "dmg", "arch": ["x64", "arm64"] }
+            ],
+            "icon": "build-resources/icon.icns",
+            "category": "public.app-category.entertainment",
+            "darkModeSupport": true,
+            "hardenedRuntime": false,
+            "gatekeeperAssess": false
+        },
+        "dmg": {
+            "title": "${productName} ${version}",
+            "icon": "build-resources/icon.icns",
+            "background": null,
+            "window": { "width": 540, "height": 380 },
+            "contents": [
+                { "x": 140, "y": 180, "type": "file" },
+                { "x": 400, "y": 180, "type": "link", "path": "/Applications" }
+            ]
+        }
     }
 }
 
