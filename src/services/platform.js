@@ -43,10 +43,10 @@ export const platform = () => {
 export const hasNativeBackend = () => isElectron();
 
 /**
- * Returns true if the platform supports FFmpeg-based features.
- * Currently only Electron has FFmpeg. Phase 2 will add mobile via native plugin.
+ * Returns true if the platform supports video compilation/stitching.
+ * Electron uses FFmpeg CLI. Mobile uses native AVComposition / Media3 Transformer.
  */
-export const hasFFmpeg = () => isElectron();
+export const hasFFmpeg = () => isElectron() || isCapacitor();
 
 /**
  * Returns true if the platform supports offline speech transcription.

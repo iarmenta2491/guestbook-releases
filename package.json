@@ -31,6 +31,7 @@
         "@capacitor/status-bar": "^8.0.3",
         "@capgo/capacitor-updater": "^8.51.14",
         "@fontsource/outfit": "^5.0.0",
+        "@whiteguru/capacitor-plugin-video-editor": "^8.0.2",
         "capacitor-blob-writer": "^1.1.20",
         "cross-env": "^7.0.3",
         "electron-store": "^8.2.0",

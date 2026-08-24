@@ -348,14 +348,78 @@ const capacitorBridge = {
   // ── Desktop-only stubs (no-ops on mobile) ────────────────────────────────
 
   async transcribeClip()     { return { transcript: '', tags: [], sentiment: 'neutral' }; },
-  async stitchClips()        { return { error: 'Compilation not available on mobile yet' }; },
+
+  async stitchClips(clipIds, transitions, outputName, options = {}) {
+    try {
+      const { mobileStitch } = await import('./mobileStitch');
+      const eventConfig = await this.getActiveConfig();
+      const clips = (eventConfig?.clips || []).filter(c => clipIds.includes(c.id));
+      return await mobileStitch({
+        clips,
+        transitions,
+        outputName: outputName || `compilation_${Date.now()}.mp4`,
+        onProgress: options.onProgress,
+        options,
+      });
+    } catch (err) {
+      console.error('[Bridge] stitchClips failed:', err);
+      return { error: err.message || 'Compilation failed' };
+    }
+  },
+
   async openSaveDialog()     { return null; },
   async chooseMusicFile()    { return null; },
   async chooseMediaFile()    { return null; },
   async importExternalMedia(){ return null; },
-  async startShareServer()   { return { error: 'LAN sharing not available on mobile' }; },
-  async stopShareServer()    { return; },
-  async getFileDuration()    { return 0; },
+
+  async startShareServer({ clipPath } = {}) {
+    try {
+      const { LocalServer } = await import('../plugins/localServer');
+      // Extract directory and filename from the clip path
+      const lastSlash = clipPath.lastIndexOf('/');
+      const dirPath = clipPath.substring(0, lastSlash);
+      const filename = clipPath.substring(lastSlash + 1);
+      const { url, ip, port } = await LocalServer.start({
+        directoryPath: dirPath,
+        port: 8080,
+      });
+      return {
+        url: `http://${ip}:${port}/download?file=${encodeURIComponent(filename)}`,
+        ip,
+        port,
+      };
+    } catch (err) {
+      console.error('[Bridge] startShareServer failed:', err);
+      return { error: err.message || 'Failed to start share server' };
+    }
+  },
+
+  async stopShareServer() {
+    try {
+      const { LocalServer } = await import('../plugins/localServer');
+      await LocalServer.stop();
+    } catch (err) {
+      console.warn('[Bridge] stopShareServer:', err);
+    }
+  },
+
+  async getFileDuration(filePath) {
+    // Use a hidden video element to probe duration
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.onloadedmetadata = () => {
+        const dur = video.duration || 0;
+        video.removeAttribute('src');
+        video.load();
+        resolve(dur);
+      };
+      video.onerror = () => resolve(0);
+      video.src = Capacitor.convertFileSrc(filePath);
+    });
+  },
+
   async chooseSavePath()     { return null; },
   async chooseFolder()       { return null; },
   async openEventFolder()    { return; },
@@ -363,9 +427,18 @@ const capacitorBridge = {
   async checkForUpdates()    { return; },
   async installUpdate()      { return; },
 
-  // ── Listeners (mobile stubs) ─────────────────────────────────────────────
+  // ── Listeners (mobile) ────────────────────────────────────────────────────
 
-  onStitchProgress()      { return () => {}; },
+  onStitchProgress(callback) {
+    // Subscribe to native VideoComposer progress events
+    let listener = null;
+    import('../plugins/videoComposer').then(({ VideoComposer }) => {
+      VideoComposer.addListener('composeProgress', (event) => {
+        callback?.(Math.round((event.progress || 0) * 100));
+      }).then(l => { listener = l; });
+    }).catch(() => {});
+    return () => { if (listener) listener.remove(); };
+  },
   onTranscriptionDone()   { return () => {}; },
   onOpenAdmin()           { return () => {}; },
   onUpdateStatus()        { return () => {}; },
