@@ -52,11 +52,11 @@
             "buildResources": "build-resources"
         },
         "files": [
-            { "from": "dist",     "to": "dist",     "filter": ["**/*"] },
-            { "from": "electron", "to": "electron", "filter": ["**/*"] },
-            { "from": "scripts",  "to": "scripts",  "filter": ["**/*"] },
-            { "from": "pipeline", "to": "pipeline", "filter": ["**/*"] },
-            { "from": "engine",   "to": "engine",   "filter": ["**/*"] },
+            "dist/**/*",
+            "electron/**/*",
+            "pipeline/**/*",
+            "engine/**/*",
+            "scripts/**/*",
             "node_modules/**/*",
             "package.json",
             "!node_modules/electron/**",

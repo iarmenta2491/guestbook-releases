@@ -82,7 +82,6 @@ jobs:
           # Disable code-signing — no Apple Developer certificate on CI.
           # Users will need to right-click → Open the first time (Gatekeeper bypass).
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          CSC_LINK: ''
         run: npx electron-builder --mac --x64 --arm64 --publish always
 
       # ── 7. Upload artifacts to workflow run (for debugging / manual download)
