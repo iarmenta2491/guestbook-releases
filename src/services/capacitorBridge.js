@@ -340,7 +340,8 @@ const capacitorBridge = {
       await Share.share({
         title: 'Guestbook Clips',
         text: `${clips.length} clips recorded`,
-        url: clips[0].webPath,
+        // Use native file:// URI — Capacitor's FileProvider converts to content:// for external apps
+        url: clips[0].path,
         dialogTitle: 'Share Guestbook Clips',
       });
     }
@@ -381,13 +382,17 @@ const capacitorBridge = {
   async chooseMediaFile()    { return null; },
   async importExternalMedia(){ return null; },
 
-  async startShareServer({ clipPath } = {}) {
+  async startShareServer(arg = {}) {
     try {
+      // Accept both a bare string path and an object { clipPath }
+      const clipPath = typeof arg === 'string' ? arg : arg?.clipPath;
+      if (!clipPath) throw new Error('clipPath is required');
+      // Strip file:// prefix for native API
+      const cleanPath = clipPath.replace(/^file:\/\/\//, '/').replace(/^file:\/\//, '');
       const { LocalServer } = await import('../plugins/localServer');
-      // Extract directory and filename from the clip path
-      const lastSlash = clipPath.lastIndexOf('/');
-      const dirPath = clipPath.substring(0, lastSlash);
-      const filename = clipPath.substring(lastSlash + 1);
+      const lastSlash = cleanPath.lastIndexOf('/');
+      const dirPath = cleanPath.substring(0, lastSlash);
+      const filename = cleanPath.substring(lastSlash + 1);
       const { url, ip, port } = await LocalServer.start({
         directoryPath: dirPath,
         port: 8080,

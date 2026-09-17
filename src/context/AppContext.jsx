@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { isElectron, isCapacitor, isMobile, hasFFmpeg, hasTranscription } from '../services/platform';
 import capacitorBridge from '../services/capacitorBridge';
+import { registerLifecycleListeners, saveLifecycleState, restoreLifecycleState } from '../services/lifecycleManager';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
@@ -144,6 +145,43 @@ export function AppProvider({ children }) {
     });
     return unsub;
   }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Android lifecycle: persist state on pause, rehydrate on resume ──
+  const screenRef = useRef(screen);
+  const activeEventIdRef = useRef(activeEventId);
+  const sessionRef = useRef(session);
+  useEffect(() => { screenRef.current = screen; }, [screen]);
+  useEffect(() => { activeEventIdRef.current = activeEventId; }, [activeEventId]);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  useEffect(() => {
+    if (!isCapacitor()) return;
+    const unsub = registerLifecycleListeners({
+      onPause: () => {
+        // Save critical state so it survives Android process kill
+        saveLifecycleState({
+          screen: screenRef.current,
+          activeEventId: activeEventIdRef.current,
+          guestNumber: sessionRef.current?.guestNumber || 1,
+        });
+      },
+      onResume: async () => {
+        // Re-check if the bridge still has valid state
+        const bridge = getBridge();
+        if (!bridge) return;
+        try {
+          const res = await bridge.getEvents();
+          if (res) {
+            setEvents(res.events || []);
+            setActiveEventId(res.activeEventId || null);
+          }
+        } catch (e) {
+          console.warn('[lifecycle] resume refresh failed:', e);
+        }
+      },
+    });
+    return unsub;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Navigation ───────────────────────────────────────────────────────
   const navigateTo = useCallback((newScreen) => { setGlamMode(false); setScreen(newScreen); }, []);

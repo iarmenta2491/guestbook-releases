@@ -107,13 +107,28 @@ export default function RecordScreen({ active, glamMode = false }) {
     if (!active) return;
     async function enumerate() {
       try {
+        // On Android, check permissions first and show a helpful error if denied
+        if (isMobile()) {
+          const perms = await import('../services/lifecycleManager').then(m => m.checkMediaPermissions());
+          if (perms.camera === 'denied' || perms.microphone === 'denied') {
+            setMediaError('Camera/microphone permission denied. Please grant access in Settings → Apps → My Guestbook → Permissions, then reopen the app.');
+            return;
+          }
+        }
         const probe = await navigator.mediaDevices.getUserMedia({ video: !isAudioOnly, audio: true });
         probe.getTracks().forEach(t => t.stop());
         const list    = await navigator.mediaDevices.enumerateDevices();
         const cameras = list.filter(d => d.kind === 'videoinput');
         const mics    = list.filter(d => d.kind === 'audioinput');
         setDevices({ cameras, mics });
-      } catch (err) { console.warn('Device enumeration error:', err); }
+      } catch (err) {
+        const name = err.name || '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          setMediaError('Camera/microphone permission denied. Please grant access in Settings → Apps → My Guestbook → Permissions.');
+        } else {
+          console.warn('Device enumeration error:', err);
+        }
+      }
     }
     enumerate();
   }, [active, isAudioOnly]);
@@ -505,6 +520,40 @@ export default function RecordScreen({ active, glamMode = false }) {
   useEffect(() => {
     if (phase === 'recording' && elapsedSeconds >= maxDuration) finishRecording();
   }, [elapsedSeconds, maxDuration, phase, finishRecording]);
+
+  /* ── Android lifecycle: auto-finish recording if app goes to background ── */
+  useEffect(() => {
+    if (!active || !isMobile()) return;
+    let handle;
+    import('@capacitor/app').then(({ App }) => {
+      handle = App.addListener('pause', () => {
+        if (phase === 'recording') {
+          console.log('[RecordScreen] App paused while recording — auto-finishing');
+          finishRecording();
+        } else if (phase === 'countdown') {
+          console.log('[RecordScreen] App paused during countdown — cancelling');
+          clearTimeout(countdownRef.current);
+          stopStream();
+          setPhase('idle');
+          navigateTo('attract');
+        }
+      });
+    });
+    return () => { if (handle) handle.then(h => h.remove()); };
+  }, [active, phase, finishRecording, navigateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Watch for camera track ending (Android revokes on background) ──────── */
+  useEffect(() => {
+    if (!active || phase !== 'recording') return;
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const handleEnded = () => {
+      console.warn('[RecordScreen] Video track ended — camera revoked by OS');
+      finishRecording();
+    };
+    track.addEventListener('ended', handleEnded);
+    return () => track.removeEventListener('ended', handleEnded);
+  }, [active, phase, finishRecording]);
 
   /* ─────────────────────── Render ─────────────────────────────────────── */
   return (

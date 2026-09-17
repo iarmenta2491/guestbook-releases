@@ -18,6 +18,11 @@ const config: CapacitorConfig = {
       // Hide status bar for kiosk-like experience on mobile
       overlaysWebView: true,
     },
+    Keyboard: {
+      // Resize the body when the virtual keyboard opens so inputs stay visible
+      resize: 'body',
+      resizeOnFullScreen: true,
+    },
     ScreenOrientation: {},
   },
 };

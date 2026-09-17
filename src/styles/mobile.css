@@ -81,18 +81,28 @@ video {
   -webkit-playsinline: true;
 }
 
-/* ─── Status Bar Space (iOS) ──────────────────────────────────────────────── */
+/* ─── Status Bar Space ────────────────────────────────────────────────────── */
 /* When status bar overlays the WebView, ensure top UI elements clear it */
 
-.app-header, .admin-header, .admin-nav {
+.admin-header, .admin-tabs {
   padding-top: max(8px, var(--safe-top));
 }
 
 /* ─── Bottom Navigation / Action Buttons ──────────────────────────────────── */
-/* Ensure bottom action bars clear the iPhone/iPad home indicator */
+/* Ensure bottom action bars clear the home indicator / gesture bar */
 
-.bottom-actions, .record-controls, .review-actions {
-  padding-bottom: max(16px, var(--safe-bottom));
+.record-bottom, .review-actions-area, .share-bottom-actions,
+.admin-footer, .event-modal-footer {
+  padding-bottom: max(16px, var(--safe-bottom)) !important;
+}
+
+/* ─── Keyboard-aware form inputs ─────────────────────────────────────────── */
+/* On Android, auto-scroll focused inputs into view so the keyboard doesn't cover them */
+
+@media (pointer: coarse) {
+  input:focus, textarea:focus, select:focus {
+    scroll-margin-bottom: 120px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
