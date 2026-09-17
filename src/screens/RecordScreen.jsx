@@ -116,8 +116,13 @@ export default function RecordScreen({ active, glamMode = false }) {
         videoConstraints = false;
       } else if (selectedCamera !== 'default') {
         videoConstraints = { deviceId: { exact: selectedCamera } };
+      } else if (isMobile()) {
+        // Mobile (Android WebView / iOS WKWebView): use minimal constraints.
+        // Samsung's camera HAL rejects width/height ideal/exact constraints with
+        // NotReadableError. Let the hardware auto-negotiate resolution.
+        videoConstraints = { facingMode: 'user' };
       } else {
-        // Request dimensions matching the effective orientation.
+        // Desktop (Electron): request dimensions matching the effective orientation.
         // Sideways cameras (rotate90cw/ccw) use landscape constraints — the
         // canvas pipeline handles the rotation, not the hardware constraints.
         const wantPortrait = isPortrait && mismatch !== 'rotate90cw' && mismatch !== 'rotate90ccw';
