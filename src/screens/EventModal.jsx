@@ -4,6 +4,15 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { isElectron, isCapacitor } from '../services/platform';
+import capacitorBridge from '../services/capacitorBridge';
+
+/** Returns the platform-appropriate API bridge */
+function getBridge() {
+  if (isElectron()) return window.guestbook;
+  if (isCapacitor()) return capacitorBridge;
+  return null;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function todayISO() {
@@ -51,9 +60,10 @@ export default function EventModal({ onClose }) {
 
   // Refresh event list (re-fetches clip counts etc.)
   const refreshList = useCallback(async () => {
-    if (!window.guestbook) return;
+    const bridge = getBridge();
+    if (!bridge) return;
     try {
-      const res = await window.guestbook.getEvents();
+      const res = await bridge.getEvents();
       if (res) setLocalEvents(res.events || []);
     } catch (e) { console.warn('[EventModal] refresh failed', e); }
   }, []);
@@ -68,9 +78,13 @@ export default function EventModal({ onClose }) {
     setCreating(true);
     setCreateError('');
     try {
-      const res = await window.guestbook.createEvent({ name, date: createDate, cloneSettings });
-      if (!res.ok) { setCreateError(res.error || 'Failed to create event.'); return; }
-      reloadFromEvent({ event: res.event, settings: res.settings, clips: res.clips });
+      const bridge = getBridge();
+      if (!bridge) { setCreateError('No platform bridge available.'); return; }
+      const res = await bridge.createEvent({ name, date: createDate, cloneSettings });
+      // Electron returns { ok, event, settings, clips }, Capacitor returns { event, config }
+      if (res.ok === false) { setCreateError(res.error || 'Failed to create event.'); return; }
+      const settings = res.settings || res.config || {};
+      reloadFromEvent({ event: res.event, settings, clips: res.clips || [] });
       await refreshList();
       setTab('browse');
       setCreateName('');
@@ -84,9 +98,13 @@ export default function EventModal({ onClose }) {
     if (activating) return;
     setActivating(eventId);
     try {
-      const res = await window.guestbook.activateEvent(eventId);
-      if (!res.ok) { console.error('[EventModal] activate failed:', res.error); return; }
-      reloadFromEvent({ event: res.event, settings: res.settings, clips: res.clips });
+      const bridge = getBridge();
+      if (!bridge) return;
+      const res = await bridge.activateEvent(eventId);
+      // Electron returns { ok, event, settings, clips }, Capacitor returns settings directly
+      if (res?.ok === false) { console.error('[EventModal] activate failed:', res.error); return; }
+      const settings = res?.settings || res || {};
+      reloadFromEvent({ event: res?.event || { id: eventId }, settings, clips: res?.clips || [] });
       await refreshList();
       onClose();
     } catch (e) { console.error('[EventModal] activate error', e); }
@@ -98,17 +116,20 @@ export default function EventModal({ onClose }) {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await window.guestbook.deleteEvent(deleteTarget);
-      if (!res.ok) { console.error('[EventModal] delete failed:', res.error); return; }
-      const updated = await window.guestbook.getEvents();
+      const bridge = getBridge();
+      if (!bridge) return;
+      const res = await bridge.deleteEvent(deleteTarget);
+      // Capacitor returns void, Electron returns { ok }
+      if (res?.ok === false) { console.error('[EventModal] delete failed:', res.error); return; }
+      const updated = await bridge.getEvents();
       if (updated) {
         setLocalEvents(updated.events || []);
-        // If deleted the active event, reload from new active
-        if (activeEventId === deleteTarget && updated.activeConfig) {
+        if (activeEventId === deleteTarget) {
+          const newActive = (updated.events || []).find(e => e.id === updated.activeEventId);
           reloadFromEvent({
-            event:    (updated.events || []).find(e => e.id === updated.activeEventId),
-            settings: updated.activeConfig.settings,
-            clips:    updated.activeConfig.clips,
+            event:    newActive,
+            settings: updated.activeConfig?.settings || updated.config || {},
+            clips:    updated.activeConfig?.clips || [],
           });
         }
       }
@@ -118,7 +139,7 @@ export default function EventModal({ onClose }) {
 
   // ── Open folder ───────────────────────────────────────────────────────
   const handleOpenFolder = useCallback((eventId) => {
-    window.guestbook?.openEventFolder(eventId);
+    getBridge()?.openEventFolder?.(eventId);
   }, []);
 
   // ── Key handler: Escape = close ───────────────────────────────────────

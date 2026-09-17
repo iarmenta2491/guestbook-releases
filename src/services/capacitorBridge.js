@@ -134,14 +134,23 @@ const capacitorBridge = {
   // ── Recording ────────────────────────────────────────────────────────────
 
   async saveRecording(buffer, filename) {
-    const slug = await getActiveSlug();
-    if (!slug) throw new Error('No active event');
+    let slug = await getActiveSlug();
+
+    // Auto-create a default event if none exists yet
+    if (!slug) {
+      console.warn('[capacitorBridge] No active event — auto-creating default event');
+      const res = await this.createEvent({
+        name: 'My Event',
+        date: new Date().toISOString().slice(0, 10),
+      });
+      slug = res?.event?.slug;
+      if (!slug) throw new Error('Failed to auto-create default event');
+    }
 
     const clipsPath = `${EVENTS_DIR}/${slug}/${CLIPS_SUBDIR}`;
     await ensureDir(clipsPath);
 
-    // On mobile, MediaRecorder outputs H.264/AAC MP4 natively — no FFmpeg
-    // transcode needed. Write the blob directly to the filesystem.
+    // On mobile, write the blob directly to the filesystem.
     const blob = new Blob([buffer], { type: 'video/mp4' });
     const filePath = `${clipsPath}/${filename}`;
 
@@ -176,7 +185,7 @@ const capacitorBridge = {
     config.clips.push(clip);
     await writeEventConfig(slug, config);
 
-    return { clipId, path: stat.uri };
+    return { ok: true, clipId, path: stat.uri };
   },
 
   // ── Clips ────────────────────────────────────────────────────────────────

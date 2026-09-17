@@ -92,11 +92,37 @@ export function AppProvider({ children }) {
         // Load event registry + active event config in one call
         const res = await bridge.getEvents();
         if (res) {
-          setEvents(res.events || []);
+          const evts = res.events || [];
+          setEvents(evts);
           setActiveEventId(res.activeEventId || null);
-          if (res.activeConfig) {
-            if (res.activeConfig.settings) setSettings({ ...DEFAULT_SETTINGS, ...res.activeConfig.settings });
-            if (res.activeConfig.clips)    setClips(res.activeConfig.clips);
+
+          // Load settings from the active event's config
+          const cfg = res.activeConfig || res.config;
+          if (cfg) {
+            const s = cfg.settings || cfg;
+            if (s && typeof s === 'object') setSettings({ ...DEFAULT_SETTINGS, ...s });
+            if (cfg.clips) setClips(cfg.clips);
+          }
+
+          // On mobile, auto-create a default event if the store is empty
+          // (first launch after install). Without this, the user can't record.
+          if (evts.length === 0 && isCapacitor() && bridge.createEvent) {
+            console.log('[AppContext] No events found — auto-creating default event');
+            try {
+              const created = await bridge.createEvent({
+                name: 'My Event',
+                date: new Date().toISOString().slice(0, 10),
+              });
+              if (created?.event) {
+                setEvents([created.event]);
+                setActiveEventId(created.event.id);
+                const newSettings = created.settings || created.config || {};
+                setSettings({ ...DEFAULT_SETTINGS, ...newSettings });
+                setClips([]);
+              }
+            } catch (createErr) {
+              console.warn('[AppContext] Auto-create default event failed:', createErr);
+            }
           }
         }
       } catch (e) {

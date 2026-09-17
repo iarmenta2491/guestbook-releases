@@ -72,7 +72,7 @@ export default function ReviewScreen({ active }) {
     setSaveError(null);
     try {
       const result = await saveRecording();
-      if (!result) throw new Error('Save returned null');
+      if (!result) throw new Error('Save returned null — no active event may be configured.');
       if (settings.enableQR || settings.enableEmail) {
         navigateTo('share');
       } else {
@@ -80,7 +80,12 @@ export default function ReviewScreen({ active }) {
       }
     } catch (err) {
       console.error('Save error:', err);
-      setSaveError('Could not save recording. Please try again.');
+      const msg = err?.message || '';
+      if (msg.includes('active event') || msg.includes('No active')) {
+        setSaveError('No active event configured. Please go to Admin → Events and create or select an event first.');
+      } else {
+        setSaveError('Could not save recording. Please try again.');
+      }
       setPhase('ready');
     }
   };
