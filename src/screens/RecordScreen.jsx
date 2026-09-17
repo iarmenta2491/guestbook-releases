@@ -12,13 +12,11 @@ const VOLUME_BAR_COUNT = 16;
 /**
  * pickMimeType — returns the best MediaRecorder MIME type this browser supports.
  *
- * Priority order:
- *   1. WebM + VP9 + Opus  (Chromium / Electron — best quality)
- *   2. WebM + VP8 + Opus  (Chromium fallback)
- *   3. WebM               (Chromium basic)
- *   4. MP4 + H.264 + AAC  (Safari / WebKit — required on iOS/macOS Safari)
- *   5. MP4                (Safari basic fallback)
- *   6. ''                 (let the browser choose)
+ * On mobile (Capacitor): MP4/H.264 is prioritised because the native MediaMuxer
+ * stitcher (NativeComposer.java) can only re-mux MP4 containers. WebM/VP8 clips
+ * crash the hardware stitcher.
+ *
+ * On desktop (Electron): WebM/VP9 is prioritised for quality; FFmpeg handles any codec.
  *
  * Returns a string (possibly '') — pass to `new MediaRecorder(stream, { mimeType })`.
  */
@@ -27,17 +25,30 @@ function pickMimeType(isAudioOnly) {
     const audioCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', ''];
     return audioCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
   }
-  const videoCandidates = [
-    // WebM is checked first. On iOS WebView, isTypeSupported returns false for WebM,
-    // gracefully falling back to MP4 which is required on iOS.
+
+  // Mobile: MP4/H.264 first — required for native MediaMuxer stitching
+  if (isMobile()) {
+    const mobileCandidates = [
+      'video/mp4;codecs=avc1,mp4a.40.2',   // MP4 + H.264 + AAC (preferred)
+      'video/mp4;codecs=avc1',              // MP4 + H.264 (no AAC)
+      'video/mp4',                          // MP4 basic
+      'video/webm;codecs=h264,opus',        // WebM container + H.264 (some Android WebViews)
+      'video/webm;codecs=h264',             // WebM + H.264 (no audio codec specified)
+      '',                                   // let browser choose
+    ];
+    return mobileCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
+  }
+
+  // Desktop: WebM/VP9 for quality — FFmpeg handles all codecs
+  const desktopCandidates = [
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',
-    'video/mp4;codecs=avc1,mp4a.40.2', // Safari / WebKit
+    'video/mp4;codecs=avc1,mp4a.40.2',
     'video/mp4',
     '',
   ];
-  return videoCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
+  return desktopCandidates.find(t => !t || MediaRecorder.isTypeSupported(t)) ?? '';
 }
 
 /**
