@@ -35,7 +35,7 @@ public class VideoComposerPlugin extends Plugin {
                 height = resolution.optInt("height", 720);
             }
             String bgMusicPath = call.getString("bgMusicPath", "");
-            float bgMusicVolume = (float) call.getDouble("bgMusicVolume", 0.1);
+            float bgMusicVolume = call.getDouble("bgMusicVolume", 0.1).floatValue();
 
             // Parse clips
             List<NativeComposer.ClipInfo> clips = new ArrayList<>();
