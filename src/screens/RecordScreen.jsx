@@ -176,7 +176,7 @@ export default function RecordScreen({ active, glamMode = false }) {
         if (!canvas.captureStream) { resolve(rawStream); return; }
 
         const audioTracks = rawStream.getAudioTracks();
-        const fps = isMobile() ? 24 : 30;
+        const fps = 30;
         const canvasStream = canvas.captureStream(fps);
         audioTracks.forEach(t => canvasStream.addTrack(t));
         canvasStreamRef.current = canvasStream;
@@ -278,7 +278,7 @@ export default function RecordScreen({ active, glamMode = false }) {
         if (!canvas.captureStream) { resolve(rawStream); return; }
 
         const audioTracks = rawStream.getAudioTracks();
-        const fps = isMobile() ? 24 : 30;
+        const fps = 30;
         const canvasStream = canvas.captureStream(fps);
         audioTracks.forEach(t => canvasStream.addTrack(t));
         canvasStreamRef.current = canvasStream;
@@ -305,13 +305,18 @@ export default function RecordScreen({ active, glamMode = false }) {
       source.connect(analyser);
       analyserRef.current = analyser;
       const data = new Uint8Array(analyser.frequencyBinCount);
-      function tick() {
-        analyser.getByteFrequencyData(data);
-        const bars = Array.from({ length: VOLUME_BAR_COUNT }, (_, i) => {
-          const idx = Math.floor((i / VOLUME_BAR_COUNT) * data.length);
-          return Math.round((data[idx] / 255) * 100);
-        });
-        setVolumeBars(bars);
+      let lastTickTime = 0;
+      const TICK_INTERVAL = 1000 / 30; // Cap volume meter to 30fps (tablet is 90Hz)
+      function tick(now) {
+        if (now - lastTickTime >= TICK_INTERVAL) {
+          lastTickTime = now;
+          analyser.getByteFrequencyData(data);
+          const bars = Array.from({ length: VOLUME_BAR_COUNT }, (_, i) => {
+            const idx = Math.floor((i / VOLUME_BAR_COUNT) * data.length);
+            return Math.round((data[idx] / 255) * 100);
+          });
+          setVolumeBars(bars);
+        }
         animFrameRef.current = requestAnimationFrame(tick);
       }
       animFrameRef.current = requestAnimationFrame(tick);
@@ -692,6 +697,11 @@ export default function RecordScreen({ active, glamMode = false }) {
 
       {/* Hidden canvas used for GLAM filter pipeline */}
       <canvas ref={canvasRef} className="record-glam-canvas" />
+
+      {/* Invisible GPU keepalive spinner — prevents Android 15 WebView from
+          freezing the camera preview when idle. The infinitely rotating
+          element forces the Chromium compositor to stay active. */}
+      <div className="gpu-keepalive" aria-hidden="true" />
 
       <div className={`record-root${active ? ' active' : ''}`}>
         {/* ── Background ── */}

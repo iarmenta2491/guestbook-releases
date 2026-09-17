@@ -86,8 +86,12 @@ export function useOrientation(settings) {
  * contain still shows it full-frame with no wasted pixels in portrait mode.
  */
 export function getPreviewVideoStyle(isPortrait, mismatch) {
-  // object-fit:contain: full frame always visible, black bars fill leftover space.
-  // Works correctly for every combination of orientation and mismatch strategy.
+  // Mobile (kiosk tablets): object-fit:cover fills the screen edge-to-edge,
+  // cropping minor aspect ratio differences (16:10 vs 16:9). No letterbox bars.
+  // Desktop (Electron): object-fit:contain shows the full frame in the window.
+  if (typeof navigator !== 'undefined' && /Android|iPad|iPhone/i.test(navigator.userAgent)) {
+    return { objectFit: 'cover' };
+  }
   return { objectFit: 'contain' };
 }
 
