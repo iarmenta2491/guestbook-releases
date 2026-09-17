@@ -3,7 +3,23 @@ import { useApp } from '../context/AppContext';
 import { ReactSortable } from 'react-sortablejs';
 import EventModal from './EventModal';
 import { isMobile, hasFFmpeg, hasTranscription } from '../services/platform';
+import { Capacitor } from '@capacitor/core';
 import '../styles/admin.css';
+
+/**
+ * Dynamically convert a native file path to a WebView-playable URL.
+ * On Capacitor, Capacitor.convertFileSrc() routes through the local
+ * Android/iOS server which handles CORS and byte-range requests.
+ * Never cache webPath from JSON — always re-derive at render time.
+ */
+function convertClipSrc(path) {
+  if (!path) return '';
+  if (Capacitor.isNativePlatform()) {
+    return Capacitor.convertFileSrc(path);
+  }
+  // Electron / web — file:// protocol works directly
+  return path;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Constants & Helpers
@@ -987,7 +1003,7 @@ function VisualTrimModal({ item, initialStart, initialEnd, onApply, onClose }) {
           <button className="ed-modal-close" onClick={onClose}>✕</button>
         </div>
 
-        <video ref={videoRef} src={clip.path}
+        <video ref={videoRef} src={convertClipSrc(clip.path)}
           style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: '42vh', display: 'block' }}
           onLoadedMetadata={e => { e.target.currentTime = trimStart; }} />
 
@@ -1232,7 +1248,7 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
               <span style={{ fontWeight: 700 }}>▶ Preview: {previewClip.filename || previewClip.id}</span>
               <button className="ed-modal-close" onClick={() => setPreviewClip(null)}>✕</button>
             </div>
-            <video src={previewClip.path} controls autoPlay style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: '60vh' }} />
+            <video src={convertClipSrc(previewClip.path)} controls autoPlay playsInline style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: '60vh' }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
               <button className="admin-btn primary" onClick={() => { addToTimeline(previewClip); setPreviewClip(null); }}>+ Add to Timeline</button>
             </div>
@@ -1354,7 +1370,9 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
                   <div className={`ed-checkbox${selected ? ' checked' : ''}`}>{selected ? '✓' : ''}</div>
                 </div>
                 <div style={{ position: 'relative' }} onClick={() => setPreviewClip(clip)} className="ed-thumb-clickable">
-                  {clip.thumbnail ? <img src={clip.thumbnail} className="ed-small-thumb" /> : <PlaceholderThumb size={32} />}
+                  {clip.path
+                    ? <video src={convertClipSrc(clip.path) + '#t=0.1'} preload="metadata" muted playsInline className="ed-small-thumb" style={{ objectFit: 'cover' }} />
+                    : <PlaceholderThumb size={32} />}
                   <div className="ed-play-overlay"><span className="ed-play-btn">▶</span></div>
                   {/* Duration badge bottom-left */}
                   {getClipDuration(clip) > 0 && (
@@ -1448,7 +1466,9 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
                   <div className="tl-item" style={{ borderColor: hasTrim ? 'var(--teal-400)' : undefined }}>
                     <div className="tl-drag-handle">≡</div>
                     <button className="tl-remove" onClick={() => removeFromTimeline(item.id)}>×</button>
-                    {item.clip.thumbnail ? <img src={item.clip.thumbnail} className="tl-thumb" /> : <PlaceholderThumb size={20} />}
+                    {item.clip.path
+                      ? <video src={convertClipSrc(item.clip.path) + '#t=0.1'} preload="metadata" muted playsInline className="tl-thumb" style={{ objectFit: 'cover' }} />
+                      : <PlaceholderThumb size={20} />}
                     <div className="tl-dur-badge">
                       {hasTrim
                         ? <span style={{ color: 'var(--teal-400)' }}>✂ {formatDuration(trimMap[item.id].start)}–{formatDuration(trimMap[item.id].end)}</span>
@@ -1565,7 +1585,9 @@ function TabAIInsights({ clips, refreshClips }) {
         {filtered.map(clip => (
           <div key={clip.id} className="insight-card">
             <div className="insight-thumb">
-              {clip.thumbnail ? <img src={clip.thumbnail} alt="" /> : <PlaceholderThumb size={48} />}
+              {clip.path
+                ? <video src={convertClipSrc(clip.path) + '#t=0.1'} preload="metadata" muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+                : <PlaceholderThumb size={48} />}
             </div>
             <div className="insight-content">
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
