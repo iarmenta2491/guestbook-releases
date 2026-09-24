@@ -37,6 +37,10 @@ public class VideoComposerPlugin extends Plugin {
             String bgMusicPath = call.getString("bgMusicPath", "");
             float bgMusicVolume = call.getDouble("bgMusicVolume", 0.1).floatValue();
 
+            // Intro/Outro paths (new)
+            String introPath = call.getString("introPath", "");
+            String outroPath = call.getString("outroPath", "");
+
             // Parse clips
             List<NativeComposer.ClipInfo> clips = new ArrayList<>();
             for (int i = 0; i < clipsArray.length(); i++) {
@@ -58,7 +62,7 @@ public class VideoComposerPlugin extends Plugin {
                 }
             }
 
-            // Write to app cache directory first (MediaMuxer needs a real file path).
+            // Write to app cache directory first.
             // After completion, JS will copy the result to the SAF directory.
             File outputDir = new File(getContext().getCacheDir(), "exports");
             if (!outputDir.exists()) outputDir.mkdirs();
@@ -67,19 +71,25 @@ public class VideoComposerPlugin extends Plugin {
                 : outputPath;
             File outputFile = new File(outputDir, fileName);
 
-            Log.d(TAG, "compose: " + clips.size() + " clips → " + outputFile.getAbsolutePath());
+            Log.d(TAG, "compose: " + clips.size() + " clips"
+                + (introPath.isEmpty() ? "" : " +intro")
+                + (outroPath.isEmpty() ? "" : " +outro")
+                + " → " + outputFile.getAbsolutePath());
 
-            // Run composition on a background thread directly (no UI thread hop)
+            // Run composition on a background thread
             final int finalWidth = width;
             final int finalHeight = height;
+            final String finalIntro = introPath;
+            final String finalOutro = outroPath;
+
             new Thread(() -> {
                 try {
                     composer.compose(
                         clips, transitions, outputFile,
                         finalWidth, finalHeight,
                         bgMusicPath, bgMusicVolume,
+                        finalIntro, finalOutro,
                         (progress) -> {
-                            // Dispatch progress back to JS on the main/bridge thread
                             JSObject event = new JSObject();
                             event.put("progress", progress);
                             notifyListeners("composeProgress", event);

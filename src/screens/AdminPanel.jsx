@@ -1202,24 +1202,40 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
   // ── Import External ────────────────────────────────────────────────────────
   const handleImportExternal = async () => {
     if (isMobile()) {
-      // On mobile, use native file picker via an input element
+      // On mobile, pick a file then copy it to the event's clips directory
+      // so both the WebView and native compositor can access it
       try {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'video/*';
+        input.accept = 'video/*,audio/*';
         input.onchange = async (e) => {
           const file = e.target.files?.[0];
           if (!file) return;
-          const clip = {
-            id: `ext_${Date.now()}`,
-            filename: file.name,
-            path: URL.createObjectURL(file),
-            isExternal: true,
-            createdAt: new Date().toISOString(),
-            duration: 0,
-            tags: [],
-          };
-          setExternalClips(prev => [...prev, clip]);
+          try {
+            // Read file as ArrayBuffer
+            const buffer = await file.arrayBuffer();
+
+            // Save via the bridge (copies to event's clips/ and registers in config)
+            const bridge = window.guestbook;
+            if (bridge?.saveRecording) {
+              const filename = `import_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+              const result = await bridge.saveRecording(buffer, filename);
+              if (result?.ok) {
+                // Reload clips from the store to pick up the newly registered clip
+                if (refreshClips) await refreshClips();
+                // Get the updated clips list to find the new one
+                const updatedClips = await bridge.getClips();
+                if (updatedClips) {
+                  const newClip = updatedClips.find(c => c.filename === filename);
+                  if (newClip) {
+                    setExternalClips(prev => [...prev, { ...newClip, isExternal: true }]);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Failed to import media:', err);
+          }
         };
         input.click();
       } catch (e) { console.error('Mobile import error:', e); }

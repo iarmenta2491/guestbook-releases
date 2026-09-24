@@ -61,6 +61,8 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
     bgMusicPath = null,
     bgMusicVolume = 0.1,
     transitionDurations = [],
+    intro = null,
+    outro = null,
   } = options;
 
   onProgress?.(2);
@@ -111,6 +113,8 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
       resolution: { width: 1280, height: 720 },
       bgMusicPath: bgMusicPath || '',
       bgMusicVolume,
+      introPath: intro?.mediaPath || '',
+      outroPath: outro?.mediaPath || '',
     });
 
     onProgress?.(100);
