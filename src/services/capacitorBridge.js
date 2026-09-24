@@ -185,6 +185,22 @@ const capacitorBridge = {
     config.clips.push(clip);
     await writeEventConfig(slug, config);
 
+    // Copy to user's chosen SAF directory (USB drive / custom folder)
+    if (config.savePath && Capacitor.isNativePlatform()) {
+      try {
+        const { FileManager } = await import('../plugins/fileManager');
+        // stat.uri is file:///data/... — strip to get absolute path
+        const absPath = stat.uri.replace(/^file:\/\//, '');
+        await FileManager.copyToSafDirectory({
+          sourcePath: absPath,
+          treeUri: config.savePath,
+          fileName: filename,
+        });
+      } catch (err) {
+        console.warn('[Bridge] SAF copy failed (clip still saved internally):', err);
+      }
+    }
+
     return { ok: true, clipId, path: stat.uri };
   },
 
@@ -276,9 +292,28 @@ const capacitorBridge = {
     const eventSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
     await ensureDir(`${EVENTS_DIR}/${eventSlug}/${CLIPS_SUBDIR}`);
+
+    // Prompt SAF folder picker so the user can choose where to store clips
+    let savePath = null;
+    let savePathDisplay = null;
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { FileManager } = await import('../plugins/fileManager');
+        const result = await FileManager.pickDirectory();
+        if (result?.uri) {
+          savePath = result.uri;
+          savePathDisplay = result.displayPath || result.uri;
+        }
+      } catch (err) {
+        console.warn('[Bridge] SAF picker failed during createEvent:', err);
+      }
+    }
+
     await writeEventConfig(eventSlug, {
       settings: { ...DEFAULT_SETTINGS, eventName: name },
       clips: [],
+      savePath,           // SAF content:// URI or null
+      savePathDisplay,    // Human-readable display path
     });
 
     const event = { id, name, slug: eventSlug, date, createdAt: new Date().toISOString() };
@@ -286,7 +321,7 @@ const capacitorBridge = {
     store.activeEventId = id;
     await writeStore(store);
 
-    return { event, config: { ...DEFAULT_SETTINGS, eventName: name } };
+    return { event, config: { ...DEFAULT_SETTINGS, eventName: name }, savePath, savePathDisplay };
   },
 
   async activateEvent(eventId) {
@@ -386,13 +421,29 @@ const capacitorBridge = {
       const clips = (eventConfig?.clips || []).filter(c => clipIds.includes(c.id));
       if (clips.length === 0) throw new Error('No clips found for the given IDs');
       const { mobileStitch } = await import('./mobileStitch');
+      const finalName = outputName || `compilation_${Date.now()}.mp4`;
       const result = await mobileStitch({
         clips,
         transitions,
-        outputName: outputName || `compilation_${Date.now()}.mp4`,
+        outputName: finalName,
         onProgress: options.onProgress,
         options,
       });
+
+      // Copy compiled video to user's SAF directory if configured
+      if (eventConfig?.savePath && Capacitor.isNativePlatform() && result.outputPath) {
+        try {
+          const { FileManager } = await import('../plugins/fileManager');
+          await FileManager.copyToSafDirectory({
+            sourcePath: result.outputPath,
+            treeUri: eventConfig.savePath,
+            fileName: finalName,
+          });
+        } catch (err) {
+          console.warn('[Bridge] SAF copy of export failed (still in internal storage):', err);
+        }
+      }
+
       return { ok: true, ...result };
     } catch (err) {
       console.error('[Bridge] stitchClips failed:', err);
@@ -405,12 +456,22 @@ const capacitorBridge = {
   async chooseMediaFile()    { return null; },
   async importExternalMedia(){ return null; },
 
-  /** Open native folder picker (SAF) — works with USB-C drives too */
+  /** Open native folder picker (SAF) — works with USB-C drives too.
+   *  Also persists the chosen URI to the active event's config so
+   *  all future saves/exports route there automatically. */
   async chooseSavePath() {
     try {
       const { FileManager } = await import('../plugins/fileManager');
       const result = await FileManager.pickDirectory();
       if (result?.uri) {
+        // Persist to the active event config immediately
+        const slug = await getActiveSlug();
+        if (slug) {
+          const config = await readEventConfig(slug);
+          config.savePath = result.uri;
+          config.savePathDisplay = result.displayPath || result.uri;
+          await writeEventConfig(slug, config);
+        }
         return { ok: true, path: result.displayPath || result.uri, uri: result.uri };
       }
       return null; // user cancelled
@@ -518,17 +579,24 @@ const capacitorBridge = {
   },
 
   /** Open the Android file manager at the event's clips folder */
-  async openEventFolder() {
+  async openEventFolder(eventId) {
     try {
-      const slug = await getActiveSlug();
+      let slug;
+      if (eventId) {
+        // If called from EventModal with a specific event ID
+        const store = await readStore();
+        const ev = store.events.find(e => e.id === eventId);
+        slug = ev?.slug;
+      }
+      if (!slug) slug = await getActiveSlug();
       if (!slug) return;
       const config = await readEventConfig(slug);
       const { FileManager } = await import('../plugins/fileManager');
-      // If event has a custom SAF URI, open there
-      if (config.customSaveUri) {
-        await FileManager.openFileManager({ uri: config.customSaveUri });
+      // Use the event's SAF save path (from creation or chooseSavePath)
+      if (config.savePath) {
+        await FileManager.openFileManager({ uri: config.savePath });
       } else {
-        // Otherwise open at the event's clips directory
+        // Fallback: open internal clips directory
         const clipDir = `events/${slug}/clips`;
         const stat = await Filesystem.stat({ path: clipDir, directory: Directory.Data });
         await FileManager.openFileManager({ path: stat.uri });

@@ -380,9 +380,9 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
     try {
       const res = await window.guestbook.chooseSavePath();
       if (res?.ok && res.path) {
-        // Persist both display path and SAF URI so openEventFolder can use it
-        setDraft(d => ({ ...d, customSavePath: res.path, customSaveUri: res.uri || '' }));
-        setStorageDisplay('—'); // will refresh on next clips change
+        // Bridge already persists savePath to event config — update draft for display
+        setDraft(d => ({ ...d, savePath: res.uri, savePathDisplay: res.path }));
+        setStorageDisplay('—');
       }
     } catch (e) { console.error('chooseSavePath error:', e); }
   };
@@ -428,7 +428,7 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
           <button className="admin-btn danger" disabled={clips.length === 0} onClick={handleDeleteAll}>Delete All Clips</button>
         </div>
         <div className="form-hint" style={{ marginTop: 8 }}>
-          <strong>Save Path:</strong> {draft.customSavePath || (isMobile() ? 'App Internal Storage' : (draft.savePath || 'Default App Storage'))}
+          <strong>Save Path:</strong> {draft.savePathDisplay || (isMobile() ? 'App Internal Storage' : (draft.savePath || 'Default App Storage'))}
         </div>
       </div>
 

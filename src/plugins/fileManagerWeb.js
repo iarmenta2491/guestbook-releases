@@ -18,4 +18,9 @@ export class FileManagerWeb {
     console.warn('[FileManager] shareFiles not available on web');
     return { ok: false, sharedCount: 0 };
   }
+
+  async copyToSafDirectory() {
+    console.warn('[FileManager] copyToSafDirectory not available on web');
+    return { ok: false };
+  }
 }
