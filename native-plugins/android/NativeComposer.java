@@ -5,6 +5,7 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaMuxer;
 import android.util.Log;
 
@@ -105,6 +106,17 @@ public class NativeComposer {
         if (clips == null || clips.isEmpty()) {
             throw new IllegalArgumentException("No clips to compose");
         }
+
+        // ── Dynamic Resolution: probe the FIRST clip's native dimensions ────
+        // Do NOT trust JS-supplied resolution (often hardcoded to 1280x720).
+        // Use the actual video dimensions so portrait clips stay portrait.
+        int[] nativeDims = probeNativeResolution(clips.get(0).path);
+        if (nativeDims[0] > 0 && nativeDims[1] > 0) {
+            targetWidth = nativeDims[0];
+            targetHeight = nativeDims[1];
+        }
+        Log.d(TAG, "Output resolution: " + targetWidth + "x" + targetHeight
+            + " (probed from first clip)");
 
         // Clean intro/outro paths
         introPath = ClipInfo.sanitizePath(introPath);
@@ -432,8 +444,42 @@ public class NativeComposer {
         return null; // intro or outro position
     }
 
+    /**
+     * Probe the native resolution of a video file using MediaMetadataRetriever.
+     * Accounts for rotation metadata (90°/270° swaps width↔height).
+     * @return int[]{width, height} or {0, 0} on failure
+     */
+    private int[] probeNativeResolution(String path) {
+        try {
+            MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+            mmr.setDataSource(path);
+            String widthStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+            String heightStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            String rotStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            mmr.release();
 
-    // ── MediaMuxer Fast Path (hard-cuts only, no intro/outro) ────────────────
+            if (widthStr == null || heightStr == null) return new int[]{0, 0};
+
+            int w = Integer.parseInt(widthStr);
+            int h = Integer.parseInt(heightStr);
+            int rotation = 0;
+            if (rotStr != null) {
+                try { rotation = Integer.parseInt(rotStr); } catch (Exception ignore) {}
+            }
+
+            // 90° or 270° rotation means the actual display is swapped
+            if (rotation == 90 || rotation == 270) {
+                int tmp = w; w = h; h = tmp;
+            }
+
+            Log.d(TAG, "probeNativeResolution: " + path.substring(path.lastIndexOf('/') + 1)
+                + " → " + w + "x" + h + " (rotation=" + rotation + ")");
+            return new int[]{w, h};
+        } catch (Exception e) {
+            Log.w(TAG, "probeNativeResolution failed: " + e.getMessage());
+            return new int[]{0, 0};
+        }
+    }
 
     /**
      * Check whether an audio MIME type is compatible with the MP4 muxer.
