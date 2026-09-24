@@ -110,29 +110,39 @@ public class NativeComposer {
         boolean hasIntro = introPath != null && !introPath.isEmpty() && new File(introPath).exists();
         boolean hasOutro = outroPath != null && !outroPath.isEmpty() && new File(outroPath).exists();
 
-        // Determine if we need the FFmpeg path
-        boolean needsCrossfade = false;
+        // STRICT ROUTING: Use FFmpeg for ANY non-trivial composition.
+        // Only use MediaMuxer fast path when ALL transitions are "none"
+        // AND there is no intro/outro AND there is no background music.
+        boolean hasNonTrivialTransition = false;
         if (transitions != null) {
             for (TransitionInfo t : transitions) {
-                if ("crossfade".equalsIgnoreCase(t.type) && t.durationMs > 0) {
-                    needsCrossfade = true;
+                if (t.type != null && !"none".equalsIgnoreCase(t.type)) {
+                    hasNonTrivialTransition = true;
                     break;
                 }
             }
         }
+        boolean hasBgMusic = bgMusicPath != null && !bgMusicPath.isEmpty()
+            && new File(ClipInfo.sanitizePath(bgMusicPath)).exists();
 
-        if (clips.size() == 1 && !hasIntro && !hasOutro && !needsCrossfade) {
+        boolean needsFFmpeg = hasNonTrivialTransition || hasIntro || hasOutro || hasBgMusic;
+
+        Log.d(TAG, "compose: " + clips.size() + " clips"
+            + (hasIntro ? " +intro" : "") + (hasOutro ? " +outro" : "")
+            + (hasNonTrivialTransition ? " +transitions" : "")
+            + (hasBgMusic ? " +bgMusic" : "")
+            + " → " + (needsFFmpeg ? "FFmpeg" : "MediaMuxer"));
+
+        if (clips.size() == 1 && !needsFFmpeg) {
             copySingleClip(clips.get(0), outputFile, progressCallback);
             return;
         }
 
-        if (needsCrossfade || hasIntro || hasOutro) {
-            // Use FFmpeg for complex operations
+        if (needsFFmpeg) {
             composeWithFFmpeg(clips, transitions, outputFile, targetWidth, targetHeight,
                     bgMusicPath, bgMusicVolume, introPath, outroPath,
                     hasIntro, hasOutro, progressCallback);
         } else {
-            // Fast path: MediaMuxer re-mux
             concatenateClips(clips, outputFile, targetWidth, targetHeight, progressCallback);
         }
     }
@@ -150,38 +160,29 @@ public class NativeComposer {
             ProgressCallback cb
     ) throws Exception {
 
-        // Build the full list of input files (intro + clips + outro)
-        List<String> allInputPaths = new ArrayList<>();
-        List<String> trimArgs = new ArrayList<>();
-        int introIdx = -1, outroIdx = -1;
+        // ── Step 0: Build ordered input list with durations ──────────────
+        List<String> inputPaths = new ArrayList<>();
+        List<Double> inputDurations = new ArrayList<>(); // effective duration in seconds
 
         if (hasIntro) {
-            introIdx = allInputPaths.size();
-            allInputPaths.add(introPath);
-            trimArgs.add(""); // no trim on intro
+            inputPaths.add(introPath);
+            inputDurations.add(probeDurationSec(introPath, 0, 0));
         }
-
         for (ClipInfo clip : clips) {
-            int idx = allInputPaths.size();
-            allInputPaths.add(clip.path);
-            // Build trim filter for this clip if needed
-            if (clip.trimStartMs > 0 || clip.trimEndMs > 0) {
-                // We'll handle trims in the filter_complex below
-            }
-            trimArgs.add(clip.trimStartMs + ":" + clip.trimEndMs);
+            inputPaths.add(clip.path);
+            inputDurations.add(probeDurationSec(clip.path, clip.trimStartMs, clip.trimEndMs));
         }
-
         if (hasOutro) {
-            outroIdx = allInputPaths.size();
-            allInputPaths.add(outroPath);
-            trimArgs.add(""); // no trim on outro
+            inputPaths.add(outroPath);
+            inputDurations.add(probeDurationSec(outroPath, 0, 0));
         }
 
-        // Build FFmpeg command
-        StringBuilder cmd = new StringBuilder();
+        int totalInputs = inputPaths.size();
+        Log.d(TAG, "FFmpeg: " + totalInputs + " inputs, durations=" + inputDurations);
 
-        // Input files
-        for (String path : allInputPaths) {
+        // ── Step 1: Build -i arguments ──────────────────────────────────
+        StringBuilder cmd = new StringBuilder();
+        for (String path : inputPaths) {
             cmd.append("-i \"").append(path).append("\" ");
         }
 
@@ -190,128 +191,125 @@ public class NativeComposer {
         if (bgMusicPath != null && !bgMusicPath.isEmpty()) {
             String cleanBgMusic = ClipInfo.sanitizePath(bgMusicPath);
             if (new File(cleanBgMusic).exists()) {
-                bgMusicIdx = allInputPaths.size();
+                bgMusicIdx = totalInputs; // index after all video inputs
                 cmd.append("-i \"").append(cleanBgMusic).append("\" ");
             }
         }
 
-        // Build the filter_complex
+        // ── Step 2: Build filter_complex ────────────────────────────────
         StringBuilder filter = new StringBuilder();
-        int totalInputs = allInputPaths.size();
 
-        // Step 1: Scale and set PTS for each input
+        // Normalize all inputs: scale, pad, fps, audio format
         for (int i = 0; i < totalInputs; i++) {
+            // Video: determine trim filter
             String trimFilter = "";
-            // Apply trim for clips (not intro/outro)
-            if (i != introIdx && i != outroIdx) {
-                int clipIdx = hasIntro ? i - 1 : i;
-                if (clipIdx >= 0 && clipIdx < clips.size()) {
-                    ClipInfo clip = clips.get(clipIdx);
-                    if (clip.trimStartMs > 0 || clip.trimEndMs > 0) {
-                        double startSec = clip.trimStartMs / 1000.0;
-                        if (clip.trimEndMs > 0) {
-                            double endSec = clip.trimEndMs / 1000.0;
-                            trimFilter = String.format(Locale.US, "trim=%.3f:%.3f,setpts=PTS-STARTPTS,", startSec, endSec);
-                        } else {
-                            trimFilter = String.format(Locale.US, "trim=start=%.3f,setpts=PTS-STARTPTS,", startSec);
-                        }
-                    }
+            ClipInfo clipForTrim = getClipForInput(i, clips, hasIntro);
+            if (clipForTrim != null && (clipForTrim.trimStartMs > 0 || clipForTrim.trimEndMs > 0)) {
+                double startSec = clipForTrim.trimStartMs / 1000.0;
+                if (clipForTrim.trimEndMs > 0) {
+                    trimFilter = String.format(Locale.US,
+                        "trim=%.3f:%.3f,setpts=PTS-STARTPTS,", startSec, clipForTrim.trimEndMs / 1000.0);
+                } else {
+                    trimFilter = String.format(Locale.US,
+                        "trim=start=%.3f,setpts=PTS-STARTPTS,", startSec);
                 }
             }
-
             filter.append(String.format(Locale.US,
-                "[%d:v]%sscale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30[v%d];",
+                "[%d:v]%sscale=%d:%d:force_original_aspect_ratio=decrease," +
+                "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30[v%d];",
                 i, trimFilter, targetWidth, targetHeight, targetWidth, targetHeight, i));
 
-            // Audio: normalize each input's audio
+            // Audio: determine trim filter
             String audioTrim = "";
-            if (i != introIdx && i != outroIdx) {
-                int clipIdx = hasIntro ? i - 1 : i;
-                if (clipIdx >= 0 && clipIdx < clips.size()) {
-                    ClipInfo clip = clips.get(clipIdx);
-                    if (clip.trimStartMs > 0 || clip.trimEndMs > 0) {
-                        double startSec = clip.trimStartMs / 1000.0;
-                        if (clip.trimEndMs > 0) {
-                            double endSec = clip.trimEndMs / 1000.0;
-                            audioTrim = String.format(Locale.US, "atrim=%.3f:%.3f,asetpts=PTS-STARTPTS,", startSec, endSec);
-                        } else {
-                            audioTrim = String.format(Locale.US, "atrim=start=%.3f,asetpts=PTS-STARTPTS,", startSec);
-                        }
-                    }
+            if (clipForTrim != null && (clipForTrim.trimStartMs > 0 || clipForTrim.trimEndMs > 0)) {
+                double startSec = clipForTrim.trimStartMs / 1000.0;
+                if (clipForTrim.trimEndMs > 0) {
+                    audioTrim = String.format(Locale.US,
+                        "atrim=%.3f:%.3f,asetpts=PTS-STARTPTS,", startSec, clipForTrim.trimEndMs / 1000.0);
+                } else {
+                    audioTrim = String.format(Locale.US,
+                        "atrim=start=%.3f,asetpts=PTS-STARTPTS,", startSec);
                 }
             }
-            filter.append(String.format("[%d:a]%saformat=sample_rates=44100:channel_layouts=stereo[a%d];", i, audioTrim, i));
+            filter.append(String.format(Locale.US,
+                "[%d:a]%saformat=sample_rates=44100:channel_layouts=stereo[a%d];",
+                i, audioTrim, i));
         }
 
-        // Step 2: Apply crossfade transitions between clips (or just concat)
-        boolean hasCrossfade = false;
-        if (transitions != null) {
-            for (TransitionInfo t : transitions) {
-                if ("crossfade".equalsIgnoreCase(t.type) && t.durationMs > 0) {
-                    hasCrossfade = true;
-                    break;
-                }
+        // ── Step 3: Build transition chain ──────────────────────────────
+        // Build the full transition list (intro→clip, clip→clip, clip→outro)
+        // For intro/outro joints where no user transition exists, use hard-cut
+        List<TransitionInfo> fullTransitions = new ArrayList<>();
+        for (int i = 1; i < totalInputs; i++) {
+            TransitionInfo t = null;
+            // Map input-pair index to the user's transitions array
+            int userTransIdx;
+            if (hasIntro) {
+                userTransIdx = i - 2; // first user transition is between clip[0] and clip[1]
+            } else {
+                userTransIdx = i - 1;
             }
+            if (transitions != null && userTransIdx >= 0 && userTransIdx < transitions.size()) {
+                t = transitions.get(userTransIdx);
+            }
+            fullTransitions.add(t != null ? t : new TransitionInfo("none", 0));
         }
 
-        if (hasCrossfade && totalInputs >= 2) {
-            // Build crossfade chain
-            // First pair: xfade v0 and v1
+        if (totalInputs >= 2) {
+            // Chain xfade/concat operations pairwise
             String prevVideo = "[v0]";
             String prevAudio = "[a0]";
+            // Running offset = duration of accumulated output so far
+            double runningDuration = inputDurations.get(0);
 
-            for (int i = 1; i < totalInputs; i++) {
-                TransitionInfo t = null;
-                // Map input index to transition index
-                int transIdx = i - 1;
-                if (hasIntro) transIdx = i - 2; // intro doesn't count in transitions array
-                if (transitions != null && transIdx >= 0 && transIdx < transitions.size()) {
-                    t = transitions.get(transIdx);
-                }
+            for (int i = 0; i < fullTransitions.size(); i++) {
+                TransitionInfo t = fullTransitions.get(i);
+                int nextInputIdx = i + 1;
+                String nextVideo = "[v" + nextInputIdx + "]";
+                String nextAudio = "[a" + nextInputIdx + "]";
+                String outVideo = (i < fullTransitions.size() - 1) ? "[xv" + i + "]" : "[outv]";
+                String outAudio = (i < fullTransitions.size() - 1) ? "[xa" + i + "]" : "[outa]";
 
-                String nextVideo = "[v" + i + "]";
-                String nextAudio = "[a" + i + "]";
-                String outVideo, outAudio;
+                boolean isTransition = t.type != null && !"none".equalsIgnoreCase(t.type) && t.durationMs > 0;
 
-                if (i < totalInputs - 1) {
-                    outVideo = "[xv" + i + "]";
-                    outAudio = "[xa" + i + "]";
-                } else {
-                    outVideo = "[outv]";
-                    outAudio = "[outa]";
-                }
+                if (isTransition) {
+                    double xfadeDur = t.durationMs / 1000.0;
+                    // offset = point in the accumulated output where the crossfade starts
+                    // = total accumulated duration MINUS the crossfade overlap
+                    double offset = Math.max(0, runningDuration - xfadeDur);
 
-                if (t != null && "crossfade".equalsIgnoreCase(t.type) && t.durationMs > 0) {
-                    double durSec = t.durationMs / 1000.0;
-                    // Video crossfade
+                    Log.d(TAG, String.format(Locale.US,
+                        "xfade[%d→%d]: type=%s dur=%.2fs offset=%.2fs (running=%.2fs)",
+                        i, nextInputIdx, t.type, xfadeDur, offset, runningDuration));
+
                     filter.append(String.format(Locale.US,
-                        "%s%sxfade=transition=fade:duration=%.2f:offset=0%s;",
-                        prevVideo, nextVideo, durSec, outVideo));
-                    // Audio crossfade
+                        "%s%sxfade=transition=fade:duration=%.3f:offset=%.3f%s;",
+                        prevVideo, nextVideo, xfadeDur, offset, outVideo));
                     filter.append(String.format(Locale.US,
-                        "%s%sacrossfade=d=%.2f:c1=tri:c2=tri%s;",
-                        prevAudio, nextAudio, durSec, outAudio));
+                        "%s%sacrossfade=d=%.3f:c1=tri:c2=tri%s;",
+                        prevAudio, nextAudio, xfadeDur, outAudio));
+
+                    // After crossfade, the total duration shrinks by the overlap
+                    runningDuration = offset + inputDurations.get(nextInputIdx);
                 } else {
-                    // Hard-cut concat
-                    filter.append(String.format("%s%sconcat=n=2:v=1:a=0%s;", prevVideo, nextVideo, outVideo));
-                    filter.append(String.format("%s%sconcat=n=2:v=0:a=1%s;", prevAudio, nextAudio, outAudio));
+                    // Hard-cut: concat
+                    filter.append(String.format(Locale.US,
+                        "%s%sconcat=n=2:v=1:a=0%s;", prevVideo, nextVideo, outVideo));
+                    filter.append(String.format(Locale.US,
+                        "%s%sconcat=n=2:v=0:a=1%s;", prevAudio, nextAudio, outAudio));
+
+                    runningDuration += inputDurations.get(nextInputIdx);
                 }
 
                 prevVideo = outVideo;
                 prevAudio = outAudio;
             }
         } else {
-            // Simple concat of all inputs
-            for (int i = 0; i < totalInputs; i++) {
-                filter.append("[v").append(i).append("]");
-            }
-            for (int i = 0; i < totalInputs; i++) {
-                filter.append("[a").append(i).append("]");
-            }
-            filter.append(String.format("concat=n=%d:v=1:a=1[outv][outa];", totalInputs));
+            // Single input — just pass through
+            filter.append("[v0]null[outv];[a0]anull[outa];");
         }
 
-        // Step 3: Mix background music if provided
+        // ── Step 4: Mix background music ────────────────────────────────
         String finalAudio = "[outa]";
         if (bgMusicIdx >= 0) {
             filter.append(String.format(Locale.US,
@@ -321,9 +319,8 @@ public class NativeComposer {
             finalAudio = "[finala]";
         }
 
-        // Build complete command
+        // ── Step 5: Build final command ─────────────────────────────────
         String filterStr = filter.toString();
-        // Remove trailing semicolon
         if (filterStr.endsWith(";")) {
             filterStr = filterStr.substring(0, filterStr.length() - 1);
         }
@@ -351,6 +348,45 @@ public class NativeComposer {
             throw new Exception("FFmpeg composition failed: " + session.getReturnCode()
                 + "\n" + (logs != null && logs.length() > 500 ? logs.substring(logs.length() - 500) : logs));
         }
+    }
+
+    /**
+     * Probe the effective duration of a media file in seconds.
+     * If trim is specified, returns the trimmed duration.
+     */
+    private double probeDurationSec(String path, long trimStartMs, long trimEndMs) {
+        try {
+            MediaExtractor ext = new MediaExtractor();
+            ext.setDataSource(path);
+            long durUs = 0;
+            for (int t = 0; t < ext.getTrackCount(); t++) {
+                MediaFormat fmt = ext.getTrackFormat(t);
+                if (fmt.containsKey(MediaFormat.KEY_DURATION)) {
+                    durUs = Math.max(durUs, fmt.getLong(MediaFormat.KEY_DURATION));
+                }
+            }
+            ext.release();
+            double durSec = durUs / 1_000_000.0;
+            double startSec = trimStartMs / 1000.0;
+            double endSec = trimEndMs > 0 ? trimEndMs / 1000.0 : durSec;
+            double effectiveDur = endSec - startSec;
+            return Math.max(0.1, effectiveDur); // min 100ms to avoid division by zero
+        } catch (Exception e) {
+            Log.w(TAG, "probeDurationSec failed for " + path + ": " + e.getMessage());
+            return 5.0; // fallback 5 seconds
+        }
+    }
+
+    /**
+     * Map an input index (in the full intro+clips+outro list) to a ClipInfo,
+     * returning null for intro/outro positions.
+     */
+    private ClipInfo getClipForInput(int inputIdx, List<ClipInfo> clips, boolean hasIntro) {
+        int clipIdx = hasIntro ? inputIdx - 1 : inputIdx;
+        if (clipIdx >= 0 && clipIdx < clips.size()) {
+            return clips.get(clipIdx);
+        }
+        return null; // intro or outro position
     }
 
 
@@ -429,16 +465,18 @@ public class NativeComposer {
         muxer.start();
 
         if (audioNeedsTranscode && srcAudioTrack >= 0) {
+            // copyClipWithAudioTranscode releases muxer+extractor internally
+            // because it delegates to FFmpeg instead
             copyClipWithAudioTranscode(extractor, muxer, srcVideoTrack, srcAudioTrack,
                     muxVideoTrack, muxAudioTrack, clip, cb);
+            // Do NOT stop/release muxer or extractor — already done
         } else {
             copyClipDirect(extractor, muxer, srcVideoTrack, srcAudioTrack,
                     muxVideoTrack, muxAudioTrack, clip, cb);
+            muxer.stop();
+            muxer.release();
+            extractor.release();
         }
-
-        muxer.stop();
-        muxer.release();
-        extractor.release();
         if (cb != null) cb.onProgress(1.0f);
     }
 
@@ -479,10 +517,13 @@ public class NativeComposer {
     private void copyClipWithAudioTranscode(MediaExtractor extractor, MediaMuxer muxer,
             int srcVideo, int srcAudio, int muxVideo, int muxAudio,
             ClipInfo clip, ProgressCallback cb) throws Exception {
-        // For single clip, use FFmpeg for simplicity
-        // (the MediaCodec transcode pipeline is already available but complex)
-        // Since this is a single clip, just re-encode via FFmpeg
-        File tempOut = new File(context.getCacheDir(), "single_transcode_" + System.currentTimeMillis() + ".mp4");
+        // The MediaMuxer was already started by the caller but we can't use it
+        // for Opus audio. Stop/release it, then use FFmpeg to re-encode the audio.
+        try { muxer.stop(); } catch (Exception ignore) {}
+        try { muxer.release(); } catch (Exception ignore) {}
+        extractor.release();
+
+        // Use FFmpeg for the transcode: copy video, encode audio to AAC
         String trimArgs = "";
         if (clip.trimStartMs > 0) {
             trimArgs += String.format(Locale.US, " -ss %.3f", clip.trimStartMs / 1000.0);
@@ -491,24 +532,22 @@ public class NativeComposer {
             trimArgs += String.format(Locale.US, " -to %.3f", clip.trimEndMs / 1000.0);
         }
 
+        // Get the output file from cache (caller already created the muxer at this path)
+        File outputDir = new File(context.getCacheDir(), "exports");
+        if (!outputDir.exists()) outputDir.mkdirs();
+        File tempOut = new File(outputDir, "transcode_" + System.currentTimeMillis() + ".mp4");
+
         String cmd = String.format(Locale.US,
             "%s -i \"%s\" -c:v copy -c:a aac -b:a 128k -movflags +faststart -y \"%s\"",
             trimArgs, clip.path, tempOut.getAbsolutePath());
 
+        Log.d(TAG, "Single clip transcode: " + cmd);
         FFmpegSession session = FFmpegKit.execute(cmd);
         if (!ReturnCode.isSuccess(session.getReturnCode())) {
             throw new Exception("Audio transcode failed: " + session.getOutput());
         }
-
-        // Copy to final output
-        java.nio.file.Files.copy(tempOut.toPath(), muxer != null ?
-            outputFile(muxer).toPath() : tempOut.toPath(),
-            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        tempOut.delete();
+        if (cb != null) cb.onProgress(1.0f);
     }
-
-    // Dummy helper — not actually used since we handle single clip via FFmpeg
-    private File outputFile(MediaMuxer muxer) { return null; }
 
 
     // ── MediaMuxer Concatenation (hard-cuts only) ────────────────────────────

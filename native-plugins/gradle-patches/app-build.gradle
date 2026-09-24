@@ -50,6 +50,8 @@ dependencies {
     // FFmpegKit — video composition with crossfade transitions, intro/outro
     // Using community-maintained fork (original arthenica retired Jan 2025)
     implementation 'dev.ffmpegkit-maintained:ffmpeg-kit-min-gpl:8.1.7'
+    // Required transitive dep for FFmpegKit (not auto-resolved by R8)
+    implementation 'com.arthenica:smart-exception-java:0.2.1'
 }
 
 apply from: 'capacitor.build.gradle'
