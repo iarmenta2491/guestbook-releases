@@ -58,42 +58,47 @@ public class VideoComposerPlugin extends Plugin {
                 }
             }
 
-            // Resolve output path relative to app data directory
-            File outputDir = new File(getContext().getFilesDir(), "exports");
+            // Write to app cache directory first (MediaMuxer needs a real file path).
+            // After completion, JS will copy the result to the SAF directory.
+            File outputDir = new File(getContext().getCacheDir(), "exports");
             if (!outputDir.exists()) outputDir.mkdirs();
-            File outputFile = new File(outputDir, outputPath.contains("/") 
-                ? outputPath.substring(outputPath.lastIndexOf('/') + 1) 
-                : outputPath);
+            String fileName = outputPath.contains("/")
+                ? outputPath.substring(outputPath.lastIndexOf('/') + 1)
+                : outputPath;
+            File outputFile = new File(outputDir, fileName);
 
-            // Run composition on background thread
+            Log.d(TAG, "compose: " + clips.size() + " clips → " + outputFile.getAbsolutePath());
+
+            // Run composition on a background thread directly (no UI thread hop)
             final int finalWidth = width;
             final int finalHeight = height;
-            getActivity().runOnUiThread(() -> {
-                // Actually run on a background thread, but launch from UI for handler
-                new Thread(() -> {
-                    try {
-                        composer.compose(
-                            clips, transitions, outputFile,
-                            finalWidth, finalHeight,
-                            bgMusicPath, bgMusicVolume,
-                            (progress) -> {
-                                JSObject event = new JSObject();
-                                event.put("progress", progress);
-                                notifyListeners("composeProgress", event);
-                            }
-                        );
+            new Thread(() -> {
+                try {
+                    composer.compose(
+                        clips, transitions, outputFile,
+                        finalWidth, finalHeight,
+                        bgMusicPath, bgMusicVolume,
+                        (progress) -> {
+                            // Dispatch progress back to JS on the main/bridge thread
+                            JSObject event = new JSObject();
+                            event.put("progress", progress);
+                            notifyListeners("composeProgress", event);
+                        }
+                    );
 
-                        JSObject result = new JSObject();
-                        result.put("outputPath", outputFile.getAbsolutePath());
-                        result.put("outputUri", "file://" + outputFile.getAbsolutePath());
-                        result.put("durationMs", 0); // Could probe with MediaExtractor
-                        call.resolve(result);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Composition failed", e);
-                        call.reject("Composition failed: " + e.getMessage(), e);
-                    }
-                }).start();
-            });
+                    Log.d(TAG, "compose complete: " + outputFile.getAbsolutePath()
+                        + " (" + outputFile.length() + " bytes)");
+
+                    JSObject result = new JSObject();
+                    result.put("outputPath", outputFile.getAbsolutePath());
+                    result.put("outputUri", "file://" + outputFile.getAbsolutePath());
+                    result.put("durationMs", 0);
+                    call.resolve(result);
+                } catch (Exception e) {
+                    Log.e(TAG, "Composition failed", e);
+                    call.reject("Composition failed: " + e.getMessage(), e);
+                }
+            }, "NativeComposer-Worker").start();
         } catch (Exception e) {
             Log.e(TAG, "compose() error", e);
             call.reject("Invalid parameters: " + e.getMessage(), e);

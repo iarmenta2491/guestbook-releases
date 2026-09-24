@@ -4,12 +4,13 @@
  * Adapter layer that mirrors the desktop stitch.js API but delegates
  * to native platform APIs via the VideoComposer Capacitor plugin.
  *
- * iOS: AVMutableComposition + AVVideoComposition (hardware-accelerated)
- * Android: Media3 Transformer + MediaMuxer (hardware-accelerated)
+ * Pipeline:
+ *  1. NativeComposer writes output to getCacheDir()/exports/ (local file)
+ *  2. Result is returned to JS with the local path
+ *  3. capacitorBridge.stitchClips() then copies to SAF if configured
  */
 
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 import { isMobile } from './platform';
 
 // Lazy-loaded native plugin reference
@@ -55,19 +56,12 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
 
   onProgress?.(2);
 
-  // Ensure output directory exists
-  const outputDir = 'exports';
-  try {
-    await Filesystem.mkdir({ path: outputDir, directory: Directory.Data, recursive: true });
-  } catch { /* exists */ }
-
-  const outputPath = `${outputDir}/${outputName}`;
+  // Output goes to native getCacheDir()/exports/ — the plugin handles the directory
+  const outputPath = outputName;
 
   // Map clips to native paths
   const nativeClips = clips.map(clip => {
-    // Convert WebView URLs back to native file URIs if needed
     let clipPath = clip.path || '';
-    // If it's a capacitor:// or https://localhost URL, we need the original native path
     if (clip.nativePath) clipPath = clip.nativePath;
     return {
       path: clipPath,
@@ -84,7 +78,8 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
 
   onProgress?.(5);
 
-  // Listen for progress events from native
+  // IMPORTANT: Attach the progress listener BEFORE calling compose()
+  // so we don't miss early progress events
   let progressListener = null;
   try {
     progressListener = await composer.addListener('composeProgress', (event) => {
@@ -92,10 +87,12 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
       const pct = 5 + Math.round((event.progress || 0) * 90);
       onProgress?.(pct);
     });
-  } catch { /* listener not supported on web stub */ }
+  } catch (e) {
+    console.warn('[mobileStitch] Could not add progress listener:', e);
+  }
 
   try {
-    // Call native composition
+    // Call native composition — writes to getCacheDir()/exports/
     const result = await composer.compose({
       clips: nativeClips,
       transitions: nativeTransitions,
