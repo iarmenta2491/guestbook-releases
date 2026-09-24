@@ -218,7 +218,8 @@ public class NativeComposer {
             }
             filter.append(String.format(Locale.US,
                 "[%d:v]%sscale=%d:%d:force_original_aspect_ratio=decrease," +
-                "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30[v%d];",
+                "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black," +
+                "format=yuv420p,setsar=1,fps=30[v%d];",
                 i, trimFilter, targetWidth, targetHeight, targetWidth, targetHeight, i));
 
             // Audio: determine trim filter
@@ -329,7 +330,7 @@ public class NativeComposer {
 
         cmd.append("-filter_complex \"").append(filterStr).append("\" ");
         cmd.append("-map \"[outv]\" -map \"").append(finalAudio).append("\" ");
-        cmd.append("-c:v libx264 -preset ultrafast -crf 23 ");
+        cmd.append("-c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p ");
         cmd.append("-c:a aac -b:a 128k ");
         cmd.append("-movflags +faststart ");
         cmd.append("-y \"").append(outputFile.getAbsolutePath()).append("\"");

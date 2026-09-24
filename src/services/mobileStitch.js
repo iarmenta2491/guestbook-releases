@@ -82,10 +82,17 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
   });
 
   // Map transitions
-  const nativeTransitions = (transitions || []).map((t, i) => ({
-    type: t === 'crossfade' ? 'crossfade' : 'none',
-    durationMs: transitionDurations[i] || (t === 'crossfade' ? 500 : 0),
-  }));
+  // IMPORTANT: UI sends transitionDurations in SECONDS (0.5, 1.0, 1.5)
+  // but native code expects MILLISECONDS. Multiply by 1000.
+  const nativeTransitions = (transitions || []).map((t, i) => {
+    const rawDur = transitionDurations[i];
+    // If rawDur is set (in seconds from UI), convert to ms; otherwise default 500ms for crossfade
+    const durationMs = rawDur ? Math.floor(rawDur * 1000) : (t === 'crossfade' ? 500 : 0);
+    return {
+      type: t === 'crossfade' ? 'crossfade' : (t === 'none' || t === 'hard-cut' ? 'none' : t),
+      durationMs,
+    };
+  });
 
   onProgress?.(5);
 
