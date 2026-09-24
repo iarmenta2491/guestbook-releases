@@ -415,12 +415,18 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
         <div className="settings-section-title">Quick Actions & Storage</div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="admin-btn" onClick={() => navigateTo('attract')}>Launch Kiosk</button>
-          <button className="admin-btn" onClick={handleOpenFolder}>Open Storage Folder</button>
-          <button className="admin-btn" onClick={handleChooseSavePath}>📁 Choose Save Location</button>
+          {isMobile() ? (
+            <button className="admin-btn" onClick={handleOpenFolder}>📤 Share Clips</button>
+          ) : (
+            <>
+              <button className="admin-btn" onClick={handleOpenFolder}>Open Storage Folder</button>
+              <button className="admin-btn" onClick={handleChooseSavePath}>📁 Choose Save Location</button>
+            </>
+          )}
           <button className="admin-btn danger" disabled={clips.length === 0} onClick={handleDeleteAll}>Delete All Clips</button>
         </div>
         <div className="form-hint" style={{ marginTop: 8 }}>
-          <strong>Save Path:</strong> {draft.customSavePath || draft.savePath || 'Default App Storage'}
+          <strong>Save Path:</strong> {isMobile() ? 'App Internal Storage' : (draft.customSavePath || draft.savePath || 'Default App Storage')}
         </div>
       </div>
 
@@ -1181,9 +1187,32 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
 
   // ── Import External ────────────────────────────────────────────────────────
   const handleImportExternal = async () => {
+    if (isMobile()) {
+      // On mobile, use native file picker via an input element
+      try {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'video/*';
+        input.onchange = async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const clip = {
+            id: `ext_${Date.now()}`,
+            filename: file.name,
+            path: URL.createObjectURL(file),
+            isExternal: true,
+            createdAt: new Date().toISOString(),
+            duration: 0,
+            tags: [],
+          };
+          setExternalClips(prev => [...prev, clip]);
+        };
+        input.click();
+      } catch (e) { console.error('Mobile import error:', e); }
+      return;
+    }
+    // Desktop: use Electron IPC
     if (!window.guestbook?.importExternalMedia) return;
-    // The main process now returns a full clip metadata object (with
-    // thumbnail, duration, filePath) rather than a bare file path string.
     const clip = await window.guestbook.importExternalMedia();
     if (clip && clip.id) {
       setExternalClips(prev => [...prev, clip]);
@@ -1192,6 +1221,19 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
 
   // ── Music ──────────────────────────────────────────────────────────────────
   const handleChooseMusic = async () => {
+    if (isMobile()) {
+      try {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'audio/*';
+        input.onchange = (e) => {
+          const file = e.target.files?.[0];
+          if (file) setBgMusicPath(URL.createObjectURL(file));
+        };
+        input.click();
+      } catch (e) { console.error('Mobile music picker error:', e); }
+      return;
+    }
     if (!window.guestbook?.chooseMusicFile) return;
     const res = await window.guestbook.chooseMusicFile();
     if (res) setBgMusicPath(res);
@@ -1219,19 +1261,57 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
   const handleExport = async () => {
     if (exporting || timeline.length === 0) return;
     try {
-      const filePath = await window.guestbook.openSaveDialog('guestbook_compilation.mp4');
-      if (!filePath) return;
+      let outputName;
+      if (isMobile()) {
+        // Mobile: save directly to app storage — no file picker dialog
+        outputName = `guestbook_compilation_${Date.now()}.mp4`;
+      } else {
+        // Desktop: open native save dialog
+        const filePath = await window.guestbook.openSaveDialog('guestbook_compilation.mp4');
+        if (!filePath) return;
+        outputName = filePath;
+      }
+
       setExporting(true); setExportProgress(0); setExportStatus('Compiling...');
-      if (window.guestbook.onStitchProgress) {
+
+      // Subscribe to progress events
+      if (window.guestbook?.onStitchProgress) {
         unsubProgressRef.current = window.guestbook.onStitchProgress((data) => {
           const pct = typeof data === 'number' ? data : data?.pct ?? 0;
           setExportProgress(Math.max(0, Math.min(100, pct)));
           if (pct >= 100) setExportStatus('Done!');
         });
       }
+
       const { clipIds, transitionValues, options } = buildPayload();
-      const res = await window.guestbook.stitchClips(clipIds, transitionValues, filePath, options);
-      if (res?.ok) setExportStatus('Saved successfully!'); else setExportStatus('Error: ' + (res?.error || 'Failed'));
+
+      // On mobile, pass progress callback directly (no IPC events)
+      if (isMobile()) {
+        options.onProgress = (pct) => {
+          setExportProgress(Math.max(0, Math.min(100, pct)));
+          if (pct >= 100) setExportStatus('Done!');
+        };
+      }
+
+      const res = await window.guestbook.stitchClips(clipIds, transitionValues, outputName, options);
+
+      if (res?.ok) {
+        setExportStatus('Compiled successfully!');
+        // On mobile, offer the result via native share sheet
+        if (isMobile() && res.outputPath) {
+          try {
+            const { Share } = await import('@capacitor/share');
+            await Share.share({
+              title: 'Guestbook Compilation',
+              text: 'Your compiled guestbook video',
+              url: res.outputPath,
+              dialogTitle: 'Share Compilation',
+            });
+          } catch { /* user cancelled share dialog */ }
+        }
+      } else {
+        setExportStatus('Error: ' + (res?.error || 'Failed'));
+      }
     } catch (e) { setExportStatus('Error: ' + (e.message || 'Unknown error')); }
     finally { setExporting(false); if (unsubProgressRef.current) { unsubProgressRef.current(); unsubProgressRef.current = null; } }
   };
@@ -1733,7 +1813,7 @@ function AttractScreenPreview({ draft }) {
           {/* Background image — uses same fit logic as real screen */}
           {hasBg && !isVideo && (
             <img
-              src={`file://${draft.attractBgPath}`}
+              src={draft.attractBgPath.startsWith('blob:') ? draft.attractBgPath : convertClipSrc(draft.attractBgPath)}
               alt=""
               style={{
                 position: 'absolute', inset: 0,
@@ -1747,7 +1827,7 @@ function AttractScreenPreview({ draft }) {
           {/* Background video — live preview (muted, looping) */}
           {hasBg && isVideo && (
             <video
-              src={`file://${draft.attractBgPath}`}
+              src={draft.attractBgPath.startsWith('blob:') ? draft.attractBgPath : convertClipSrc(draft.attractBgPath)}
               autoPlay muted loop playsInline
               style={{
                 position: 'absolute', inset: 0,
@@ -1866,10 +1946,30 @@ function AttractScreenPreview({ draft }) {
 ───────────────────────────────────────────────────────────────────────────── */
 function TabBranding({ draft, setDraft }) {
   const handleChooseImage = async () => {
+    if (isMobile()) {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*';
+      input.onchange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) setDraft(d => ({ ...d, attractBgPath: URL.createObjectURL(file), attractBgType: 'image' }));
+      };
+      input.click();
+      return;
+    }
     if (!window.guestbook?.chooseMediaFile) return;
     try { const res = await window.guestbook.chooseMediaFile('image'); if (res?.path) setDraft(d => ({ ...d, attractBgPath: res.path, attractBgType: 'image' })); } catch (e) {}
   };
   const handleChooseVideo = async () => {
+    if (isMobile()) {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'video/*';
+      input.onchange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) setDraft(d => ({ ...d, attractBgPath: URL.createObjectURL(file), attractBgType: 'video' }));
+      };
+      input.click();
+      return;
+    }
     if (!window.guestbook?.chooseMediaFile) return;
     try { const res = await window.guestbook.chooseMediaFile('video'); if (res?.path) setDraft(d => ({ ...d, attractBgPath: res.path, attractBgType: 'video' })); } catch (e) {}
   };

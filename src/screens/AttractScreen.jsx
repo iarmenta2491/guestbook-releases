@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { Capacitor } from '@capacitor/core';
 
 /* ─── Particle helpers ───────────────────────────────────────────────────── */
 const PARTICLE_COUNT = 28;
@@ -122,7 +123,11 @@ export default function AttractScreen({ active }) {
 
   const hasBg   = settings.attractBgPath && !bgError;
   const isVideo = settings.attractBgType === 'video';
-  const bgSrc   = settings.attractBgPath || '/attract_bg.png';
+  const bgSrc   = settings.attractBgPath
+    ? (settings.attractBgPath.startsWith('blob:') || settings.attractBgPath.startsWith('/')
+        ? settings.attractBgPath
+        : (Capacitor.isNativePlatform() ? Capacitor.convertFileSrc(settings.attractBgPath) : settings.attractBgPath))
+    : '/attract_bg.png';
 
   // Map the user's Display setting to CSS object-fit + object-position
   const BG_FIT_MAP = {

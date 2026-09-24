@@ -359,21 +359,30 @@ const capacitorBridge = {
 
   async transcribeClip()     { return { transcript: '', tags: [], sentiment: 'neutral' }; },
 
+  /** Return the active event's full config (settings + clips). Used by stitchClips. */
+  async getActiveConfig() {
+    const slug = await getActiveSlug();
+    if (!slug) return null;
+    return await readEventConfig(slug);
+  },
+
   async stitchClips(clipIds, transitions, outputName, options = {}) {
     try {
-      const { mobileStitch } = await import('./mobileStitch');
       const eventConfig = await this.getActiveConfig();
       const clips = (eventConfig?.clips || []).filter(c => clipIds.includes(c.id));
-      return await mobileStitch({
+      if (clips.length === 0) throw new Error('No clips found for the given IDs');
+      const { mobileStitch } = await import('./mobileStitch');
+      const result = await mobileStitch({
         clips,
         transitions,
         outputName: outputName || `compilation_${Date.now()}.mp4`,
         onProgress: options.onProgress,
         options,
       });
+      return { ok: true, ...result };
     } catch (err) {
       console.error('[Bridge] stitchClips failed:', err);
-      return { error: err.message || 'Compilation failed' };
+      return { ok: false, error: err.message || 'Compilation failed' };
     }
   },
 
@@ -381,6 +390,52 @@ const capacitorBridge = {
   async chooseMusicFile()    { return null; },
   async chooseMediaFile()    { return null; },
   async importExternalMedia(){ return null; },
+  async chooseSavePath()     { return null; },
+
+  /** Progress listener stub — mobile uses direct callback, no IPC events */
+  onStitchProgress() { return () => {}; },
+
+  /** Email sharing on mobile — opens native share sheet with the clip attached */
+  async sendEmailShare(clipPath, email) {
+    try {
+      const { Share } = await import('@capacitor/share');
+      const path = typeof clipPath === 'string' ? clipPath : clipPath?.path;
+      await Share.share({
+        title: 'Your Guestbook Recording',
+        text: `Here's your guestbook recording!`,
+        url: path,
+        dialogTitle: 'Share via Email',
+      });
+    } catch (err) {
+      console.error('[Bridge] sendEmailShare:', err);
+    }
+  },
+
+  /** Delete all clips for the active event */
+  async deleteAllClips() {
+    const slug = await getActiveSlug();
+    if (!slug) return;
+    const config = await readEventConfig(slug);
+    const clips = config.clips || [];
+    // Delete files from disk
+    for (const clip of clips) {
+      try {
+        const cleanPath = clip.path?.replace(/^file:\/\/\//, '/').replace(/^file:\/\//, '');
+        if (cleanPath) {
+          await Filesystem.deleteFile({ path: cleanPath });
+        }
+      } catch { /* file may already be gone */ }
+    }
+    // Clear clips array and save
+    config.clips = [];
+    const json = JSON.stringify(config, null, 2);
+    await Filesystem.writeFile({
+      path: `events/${slug}/config.json`,
+      data: json,
+      directory: Directory.Data,
+      encoding: 'utf8',
+    });
+  },
 
   async startShareServer(arg = {}) {
     try {
