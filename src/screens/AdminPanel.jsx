@@ -1073,10 +1073,16 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
   // Intro / Outro
   const [showIntroEditor, setShowIntroEditor] = useState(false);
   const [showOutroEditor, setShowOutroEditor] = useState(false);
-  const [introConfig, setIntroConfig] = useState({ text: '', color: '#1a1a2e', duration: 3, mediaPath: null });
-  const [outroConfig, setOutroConfig] = useState({ text: '', color: '#1a1a2e', duration: 3, mediaPath: null });
-  const [hasIntro, setHasIntro] = useState(false);
-  const [hasOutro, setHasOutro] = useState(false);
+  const [introConfig, setIntroConfig] = useState(() => {
+    const saved = draft?.introConfig;
+    return saved?.mediaPath || saved?.text ? saved : { text: '', color: '#1a1a2e', duration: 3, mediaPath: null };
+  });
+  const [outroConfig, setOutroConfig] = useState(() => {
+    const saved = draft?.outroConfig;
+    return saved?.mediaPath || saved?.text ? saved : { text: '', color: '#1a1a2e', duration: 3, mediaPath: null };
+  });
+  const [hasIntro, setHasIntro] = useState(() => !!(draft?.introConfig?.mediaPath || draft?.introConfig?.text));
+  const [hasOutro, setHasOutro] = useState(() => !!(draft?.outroConfig?.mediaPath || draft?.outroConfig?.text));
 
   // Audio
   const [bgMusicPath, setBgMusicPath]     = useState(null);
@@ -1369,13 +1375,27 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
       {/* Intro modal */}
       {showIntroEditor && (
         <TitleCardModal title="✨ Intro Title Card" config={introConfig} setConfig={setIntroConfig}
-          onApply={() => { setHasIntro(true); setShowIntroEditor(false); }} onClose={() => setShowIntroEditor(false)} />
+          onApply={() => {
+            setHasIntro(true);
+            setShowIntroEditor(false);
+            // Persist intro config to event settings so the native compositor can find the file
+            if (window.guestbook?.saveSettings) {
+              window.guestbook.saveSettings({ introConfig: { ...introConfig } });
+            }
+          }} onClose={() => setShowIntroEditor(false)} />
       )}
 
       {/* Outro modal */}
       {showOutroEditor && (
         <TitleCardModal title="🙏 Outro Title Card" config={outroConfig} setConfig={setOutroConfig}
-          onApply={() => { setHasOutro(true); setShowOutroEditor(false); }} onClose={() => setShowOutroEditor(false)} />
+          onApply={() => {
+            setHasOutro(true);
+            setShowOutroEditor(false);
+            // Persist outro config to event settings
+            if (window.guestbook?.saveSettings) {
+              window.guestbook.saveSettings({ outroConfig: { ...outroConfig } });
+            }
+          }} onClose={() => setShowOutroEditor(false)} />
       )}
 
       {/* Visual trim modal */}

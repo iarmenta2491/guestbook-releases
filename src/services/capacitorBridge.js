@@ -453,7 +453,55 @@ const capacitorBridge = {
 
   async openSaveDialog()     { return null; },
   async chooseMusicFile()    { return null; },
-  async chooseMediaFile()    { return null; },
+  async chooseMediaFile(accept = 'any') {
+    const slug = await getActiveSlug();
+    if (!slug) return null;
+
+    // Determine accept string for file input
+    const acceptStr = accept === 'video' ? 'video/*'
+      : accept === 'image' ? 'image/*'
+      : 'video/*,image/*';
+
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = acceptStr;
+      input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) { resolve(null); return; }
+        try {
+          const buffer = await file.arrayBuffer();
+          const blob = new Blob([buffer], { type: file.type });
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const filename = `media_${Date.now()}_${safeName}`;
+          const mediaDir = `${EVENTS_DIR}/${slug}`;
+          await ensureDir(mediaDir);
+
+          const filePath = `${mediaDir}/${filename}`;
+          await write_blob({
+            path: filePath,
+            directory: Directory.Data,
+            blob,
+            recursive: true,
+          });
+
+          // Get native URI
+          const stat = await Filesystem.stat({
+            path: filePath,
+            directory: Directory.Data,
+          });
+
+          resolve({ path: stat.uri, filename });
+        } catch (err) {
+          console.error('[chooseMediaFile] Error:', err);
+          resolve(null);
+        }
+      };
+      // Handle cancel (no file selected)
+      input.addEventListener('cancel', () => resolve(null));
+      input.click();
+    });
+  },
   async importExternalMedia(){ return null; },
 
   /** Open native folder picker (SAF) — works with USB-C drives too.

@@ -235,6 +235,7 @@ public class NativeComposer {
                 i, trimFilter, targetWidth, targetHeight, targetWidth, targetHeight, i));
 
             // Audio: determine trim filter
+            // Start with user-requested trim (if any)
             String audioTrim = "";
             if (clipForTrim != null && (clipForTrim.trimStartMs > 0 || clipForTrim.trimEndMs > 0)) {
                 double startSec = clipForTrim.trimStartMs / 1000.0;
@@ -246,9 +247,17 @@ public class NativeComposer {
                         "atrim=start=%.3f,asetpts=PTS-STARTPTS,", startSec);
                 }
             }
+            // CRITICAL: Trim audio to EXACTLY match probed video duration.
+            // Android MP4 audio tracks are often slightly longer than video,
+            // causing acrossfade to trigger late relative to xfade.
+            // This ensures video and audio fades happen simultaneously.
+            double videoDur = inputDurations.get(i);
+            String durationClamp = String.format(Locale.US,
+                "atrim=0:%.3f,asetpts=PTS-STARTPTS,", videoDur);
+
             filter.append(String.format(Locale.US,
-                "[%d:a]%saformat=sample_rates=44100:channel_layouts=stereo[a%d];",
-                i, audioTrim, i));
+                "[%d:a]%s%saformat=sample_rates=44100:channel_layouts=stereo[a%d];",
+                i, audioTrim, durationClamp, i));
         }
 
         // ── Step 3: Build transition chain ──────────────────────────────
