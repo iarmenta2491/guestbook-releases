@@ -334,13 +334,27 @@ const capacitorBridge = {
   // ── File System Sharing ──────────────────────────────────────────────────
 
   async openClipsFolder() {
-    // On mobile, "open folder" doesn't exist — offer native share sheet
     const clips = await this.getClips();
-    if (clips.length > 0 && clips[0].path) {
+    if (clips.length === 0) return;
+    try {
+      // Use native FileManager plugin for multi-file sharing
+      const { FileManager } = await import('../plugins/fileManager');
+      const filePaths = clips.map(c => c.path).filter(Boolean);
+      if (filePaths.length > 0) {
+        await FileManager.shareFiles({
+          files: filePaths,
+          title: `${clips.length} Guestbook Clips`,
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn('[Bridge] FileManager.shareFiles failed, falling back:', err);
+    }
+    // Fallback: single-file share via @capacitor/share
+    if (clips[0]?.path) {
       await Share.share({
         title: 'Guestbook Clips',
         text: `${clips.length} clips recorded`,
-        // Use native file:// URI — Capacitor's FileProvider converts to content:// for external apps
         url: clips[0].path,
         dialogTitle: 'Share Guestbook Clips',
       });
@@ -390,7 +404,21 @@ const capacitorBridge = {
   async chooseMusicFile()    { return null; },
   async chooseMediaFile()    { return null; },
   async importExternalMedia(){ return null; },
-  async chooseSavePath()     { return null; },
+
+  /** Open native folder picker (SAF) — works with USB-C drives too */
+  async chooseSavePath() {
+    try {
+      const { FileManager } = await import('../plugins/fileManager');
+      const result = await FileManager.pickDirectory();
+      if (result?.uri) {
+        return { ok: true, path: result.displayPath || result.uri, uri: result.uri };
+      }
+      return null; // user cancelled
+    } catch (err) {
+      console.error('[Bridge] chooseSavePath:', err);
+      return null;
+    }
+  },
 
   /** Progress listener stub — mobile uses direct callback, no IPC events */
   onStitchProgress() { return () => {}; },
@@ -489,9 +517,32 @@ const capacitorBridge = {
     });
   },
 
-  async chooseSavePath()     { return null; },
-  async chooseFolder()       { return null; },
-  async openEventFolder()    { return; },
+  /** Open the Android file manager at the event's clips folder */
+  async openEventFolder() {
+    try {
+      const slug = await getActiveSlug();
+      if (!slug) return;
+      const config = await readEventConfig(slug);
+      const { FileManager } = await import('../plugins/fileManager');
+      // If event has a custom SAF URI, open there
+      if (config.customSaveUri) {
+        await FileManager.openFileManager({ uri: config.customSaveUri });
+      } else {
+        // Otherwise open at the event's clips directory
+        const clipDir = `events/${slug}/clips`;
+        const stat = await Filesystem.stat({ path: clipDir, directory: Directory.Data });
+        await FileManager.openFileManager({ path: stat.uri });
+      }
+    } catch (err) {
+      console.warn('[Bridge] openEventFolder:', err);
+      // Fallback: open generic file manager
+      try {
+        const { FileManager } = await import('../plugins/fileManager');
+        await FileManager.openFileManager({});
+      } catch { /* ignore */ }
+    }
+  },
+  async chooseFolder()       { return this.chooseSavePath(); },
   async quitApp()            { return; },
   async checkForUpdates()    { return; },
   async installUpdate()      { return; },

@@ -366,15 +366,22 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
     catch (e) { console.error('deleteAllClips error:', e); }
   };
   const handleOpenFolder = async () => {
-    if (window.guestbook?.openClipsFolder) try { await window.guestbook.openClipsFolder(); } catch (e) {}
+    if (window.guestbook?.openEventFolder) {
+      try { await window.guestbook.openEventFolder(); } catch (e) { console.warn('openEventFolder:', e); }
+    }
+  };
+  const handleShareClips = async () => {
+    if (window.guestbook?.openClipsFolder) {
+      try { await window.guestbook.openClipsFolder(); } catch (e) { console.warn('shareClips:', e); }
+    }
   };
   const handleChooseSavePath = async () => {
     if (!window.guestbook?.chooseSavePath) return;
     try {
       const res = await window.guestbook.chooseSavePath();
       if (res?.ok && res.path) {
-        // Update draft immediately so the auto-save debounce persists the new path
-        setDraft(d => ({ ...d, customSavePath: res.path }));
+        // Persist both display path and SAF URI so openEventFolder can use it
+        setDraft(d => ({ ...d, customSavePath: res.path, customSaveUri: res.uri || '' }));
         setStorageDisplay('—'); // will refresh on next clips change
       }
     } catch (e) { console.error('chooseSavePath error:', e); }
@@ -415,18 +422,13 @@ function TabDashboard({ draft, setDraft, clips, navigateTo }) {
         <div className="settings-section-title">Quick Actions & Storage</div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="admin-btn" onClick={() => navigateTo('attract')}>Launch Kiosk</button>
-          {isMobile() ? (
-            <button className="admin-btn" onClick={handleOpenFolder}>📤 Share Clips</button>
-          ) : (
-            <>
-              <button className="admin-btn" onClick={handleOpenFolder}>Open Storage Folder</button>
-              <button className="admin-btn" onClick={handleChooseSavePath}>📁 Choose Save Location</button>
-            </>
-          )}
+          <button className="admin-btn" onClick={handleOpenFolder}>📂 Open Storage Folder</button>
+          <button className="admin-btn" onClick={handleChooseSavePath}>📁 Choose Save Location</button>
+          <button className="admin-btn" disabled={clips.length === 0} onClick={handleShareClips}>📤 Share Clips</button>
           <button className="admin-btn danger" disabled={clips.length === 0} onClick={handleDeleteAll}>Delete All Clips</button>
         </div>
         <div className="form-hint" style={{ marginTop: 8 }}>
-          <strong>Save Path:</strong> {isMobile() ? 'App Internal Storage' : (draft.customSavePath || draft.savePath || 'Default App Storage')}
+          <strong>Save Path:</strong> {draft.customSavePath || (isMobile() ? 'App Internal Storage' : (draft.savePath || 'Default App Storage'))}
         </div>
       </div>
 
@@ -1422,19 +1424,17 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
               </>
             )}
             <button className="admin-btn small primary" onClick={handleImportExternal}>⬆ Import Media</button>
-            {isMobile() ? (
-              <button
-                className="admin-btn small"
-                onClick={() => window.guestbook?.openClipsFolder?.()}
-                title="Share Clips"
-              >📤 Share Clips</button>
-            ) : (
-              <button
-                className="admin-btn small"
-                onClick={() => window.guestbook?.openClipsFolder()}
-                title="Open the save folder in File Explorer"
-              >📂 Open Save Folder</button>
-            )}
+            <button
+              className="admin-btn small"
+              onClick={handleShareClips}
+              disabled={allClips.length === 0}
+              title="Share clips via Android share sheet"
+            >📤 Share Clips</button>
+            <button
+              className="admin-btn small"
+              onClick={handleOpenFolder}
+              title="Open the clips storage folder"
+            >📂 Open Folder</button>
           </div>
         </div>
         {/* Clip grid */}
