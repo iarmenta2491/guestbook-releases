@@ -14,14 +14,23 @@ import { Capacitor } from '@capacitor/core';
 import { isMobile } from './platform';
 
 // Lazy-loaded native plugin reference
+// IMPORTANT: Do NOT return a Capacitor plugin proxy from an async function.
+// JS Promise resolution calls .then() on the return value to check if it's
+// a thenable. Capacitor proxies intercept all property access, so .then()
+// gets sent to the native bridge as a method call → crash.
 let _videoComposer = null;
+let _importPromise = null;
 
-async function getComposer() {
+async function ensureComposer() {
   if (!_videoComposer) {
-    const { VideoComposer } = await import('../plugins/videoComposer');
-    _videoComposer = VideoComposer;
+    if (!_importPromise) {
+      _importPromise = import('../plugins/videoComposer').then(mod => {
+        _videoComposer = mod.VideoComposer;
+      });
+    }
+    await _importPromise;
   }
-  return _videoComposer;
+  // Do NOT return the plugin — caller accesses _videoComposer directly
 }
 
 /**
@@ -45,7 +54,7 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
     throw new Error('mobileStitch is only available on Capacitor (iOS/Android)');
   }
 
-  const composer = await getComposer();
+  await ensureComposer();
 
   const {
     trimData = {},
@@ -79,10 +88,12 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
   onProgress?.(5);
 
   // IMPORTANT: Attach the progress listener BEFORE calling compose()
-  // so we don't miss early progress events
+  // so we don't miss early progress events.
+  // Access _videoComposer directly — never store the proxy in a variable
+  // that could be returned from an async context.
   let progressListener = null;
   try {
-    progressListener = await composer.addListener('composeProgress', (event) => {
+    progressListener = await _videoComposer.addListener('composeProgress', (event) => {
       // Native reports 0.0 - 1.0, we map to 5-95 range
       const pct = 5 + Math.round((event.progress || 0) * 90);
       onProgress?.(pct);
@@ -93,7 +104,7 @@ export async function mobileStitch({ clips, transitions, outputName, onProgress,
 
   try {
     // Call native composition — writes to getCacheDir()/exports/
-    const result = await composer.compose({
+    const result = await _videoComposer.compose({
       clips: nativeClips,
       transitions: nativeTransitions,
       outputPath,
