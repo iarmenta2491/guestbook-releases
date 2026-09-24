@@ -9,7 +9,9 @@ import android.media.MediaMuxer;
 import android.util.Log;
 
 import com.arthenica.ffmpegkit.FFmpegKit;
+import com.arthenica.ffmpegkit.FFmpegKitConfig;
 import com.arthenica.ffmpegkit.FFmpegSession;
+import com.arthenica.ffmpegkit.Level;
 import com.arthenica.ffmpegkit.ReturnCode;
 
 import java.io.File;
@@ -333,18 +335,58 @@ public class NativeComposer {
         cmd.append("-y \"").append(outputFile.getAbsolutePath()).append("\"");
 
         String finalCmd = cmd.toString();
-        Log.d(TAG, "FFmpeg command: " + finalCmd);
+
+        // ── TELEMETRY: Print full command for ADB debugging ─────────────
+        Log.e(TAG, "═══════════════════════════════════════════════════════");
+        Log.e(TAG, "FFMPEG COMMAND: " + finalCmd);
+        Log.e(TAG, "═══════════════════════════════════════════════════════");
+
+        // ── TELEMETRY: Pipe FFmpeg's internal logs to Logcat ────────────
+        FFmpegKitConfig.enableLogCallback(log -> {
+            Level level = log.getLevel();
+            String msg = log.getMessage();
+            if (msg == null) return;
+            // Trim trailing newline for cleaner logcat
+            msg = msg.replaceAll("\\n$", "");
+            if (msg.isEmpty()) return;
+            if (level == Level.AV_LOG_ERROR || level == Level.AV_LOG_FATAL) {
+                Log.e("FFmpegKit", msg);
+            } else if (level == Level.AV_LOG_WARNING) {
+                Log.w("FFmpegKit", msg);
+            } else {
+                Log.d("FFmpegKit", msg);
+            }
+        });
 
         if (cb != null) cb.onProgress(0.05f);
 
         FFmpegSession session = FFmpegKit.execute(finalCmd);
 
+        // ── TELEMETRY: Dump full output regardless of result ────────────
+        String fullOutput = session.getOutput();
+        if (fullOutput != null && !fullOutput.isEmpty()) {
+            // Log in chunks (Logcat has a 4096 byte limit per message)
+            String[] lines = fullOutput.split("\n");
+            for (String line : lines) {
+                if (!line.trim().isEmpty()) {
+                    Log.d(TAG, "FFmpeg output: " + line);
+                }
+            }
+        }
+
         if (ReturnCode.isSuccess(session.getReturnCode())) {
-            Log.d(TAG, "FFmpeg composition successful: " + outputFile.getAbsolutePath());
+            long fileSize = outputFile.exists() ? outputFile.length() : 0;
+            Log.e(TAG, "FFmpeg composition SUCCESSFUL: " + outputFile.getAbsolutePath()
+                + " (" + fileSize + " bytes)");
             if (cb != null) cb.onProgress(1.0f);
         } else {
+            Log.e(TAG, "FFmpeg composition FAILED with return code: " + session.getReturnCode());
             String logs = session.getOutput();
-            Log.e(TAG, "FFmpeg failed: " + logs);
+            if (logs != null) {
+                // Print last 2000 chars of output for error context
+                String tail = logs.length() > 2000 ? logs.substring(logs.length() - 2000) : logs;
+                Log.e(TAG, "FFmpeg tail output:\n" + tail);
+            }
             throw new Exception("FFmpeg composition failed: " + session.getReturnCode()
                 + "\n" + (logs != null && logs.length() > 500 ? logs.substring(logs.length() - 500) : logs));
         }
