@@ -490,25 +490,32 @@ public class NativeComposer {
 
         muxer.start();
 
+        // Track the running PTS offset — use actual max PTS written, NOT
+        // KEY_DURATION metadata (which is unreliable and causes out-of-order
+        // frame crashes when clip 2's timestamps overlap clip 1's actual end).
         long cumulativeTimeUs = 0;
-        long writtenDurationUs = 0;
 
         for (int c = 0; c < clips.size(); c++) {
             if (cancelled) break;
 
             ClipInfo clip = clips.get(c);
-            Log.d(TAG, "Processing clip " + (c + 1) + "/" + clips.size() + ": " + clip.path);
+            Log.d(TAG, "Processing clip " + (c + 1) + "/" + clips.size()
+                + ": " + clip.path + " (offset=" + cumulativeTimeUs + "µs)");
 
+            long maxPtsWritten;
             if (audioNeedsTranscode && muxAudioTrack >= 0) {
-                concatenateClipWithTranscode(clip, muxer, muxVideoTrack, muxAudioTrack,
+                maxPtsWritten = concatenateClipWithTranscode(clip, muxer, muxVideoTrack, muxAudioTrack,
                         cumulativeTimeUs, totalDurationUs, cb);
             } else {
-                concatenateClipDirect(clip, muxer, muxVideoTrack, muxAudioTrack,
+                maxPtsWritten = concatenateClipDirect(clip, muxer, muxVideoTrack, muxAudioTrack,
                         cumulativeTimeUs, totalDurationUs, cb);
             }
 
-            cumulativeTimeUs += clipDurations.get(c);
-            Log.d(TAG, "Clip " + (c + 1) + "/" + clips.size() + " concatenated");
+            // Advance the offset by the actual max PTS observed in this clip,
+            // plus a small gap (10ms) to guarantee no overlap between clips.
+            cumulativeTimeUs = maxPtsWritten + 10_000;
+            Log.d(TAG, "Clip " + (c + 1) + "/" + clips.size()
+                + " done — next offset: " + cumulativeTimeUs + "µs");
         }
 
         muxer.stop();
@@ -520,8 +527,9 @@ public class NativeComposer {
 
     /**
      * Concatenate a single clip by direct re-mux (no audio transcoding needed).
+     * @return the maximum PTS (µs) written to the muxer during this clip.
      */
-    private void concatenateClipDirect(
+    private long concatenateClipDirect(
             ClipInfo clip, MediaMuxer muxer,
             int muxVideoTrack, int muxAudioTrack,
             long cumulativeTimeUs, long totalDurationUs, ProgressCallback cb
@@ -551,6 +559,7 @@ public class NativeComposer {
         ByteBuffer buffer = ByteBuffer.allocate(2 * 1024 * 1024);
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
         long clipBaseTime = -1;
+        long maxPtsWritten = cumulativeTimeUs; // track the actual max PTS we write
 
         while (!cancelled) {
             int trackIndex = extractor.getSampleTrackIndex();
@@ -577,6 +586,12 @@ public class NativeComposer {
             bufferInfo.flags = extractor.getSampleFlags();
 
             muxer.writeSampleData(outTrack, buffer, bufferInfo);
+
+            // Track the highest PTS we actually wrote
+            if (bufferInfo.presentationTimeUs > maxPtsWritten) {
+                maxPtsWritten = bufferInfo.presentationTimeUs;
+            }
+
             extractor.advance();
 
             if (cb != null && totalDurationUs > 0) {
@@ -585,13 +600,15 @@ public class NativeComposer {
         }
 
         extractor.release();
+        return maxPtsWritten;
     }
 
     /**
      * Concatenate a single clip with Opus/Vorbis→AAC audio transcoding.
      * Video is re-muxed directly; audio is decoded to PCM and re-encoded as AAC.
+     * @return the maximum PTS (µs) written to the muxer during this clip.
      */
-    private void concatenateClipWithTranscode(
+    private long concatenateClipWithTranscode(
             ClipInfo clip, MediaMuxer muxer,
             int muxVideoTrack, int muxAudioTrack,
             long cumulativeTimeUs, long totalDurationUs, ProgressCallback cb
@@ -647,6 +664,7 @@ public class NativeComposer {
         boolean decoderDone = (decoder == null);
         boolean encoderDone = (encoder == null);
         long clipBaseTime = -1;
+        long maxPtsWritten = cumulativeTimeUs; // track actual max PTS written
 
         while (!cancelled && (!encoderDone || !extractorDone)) {
             // 1. Read from extractor
@@ -699,6 +717,10 @@ public class NativeComposer {
                             directInfo.flags = extractor.getSampleFlags();
                             muxer.writeSampleData(muxVideoTrack, directBuffer, directInfo);
 
+                            if (directInfo.presentationTimeUs > maxPtsWritten) {
+                                maxPtsWritten = directInfo.presentationTimeUs;
+                            }
+
                             if (cb != null && totalDurationUs > 0) {
                                 cb.onProgress((float) directInfo.presentationTimeUs / totalDurationUs);
                             }
@@ -747,6 +769,9 @@ public class NativeComposer {
                     ByteBuffer encodedBuf = encoder.getOutputBuffer(encOutIdx);
                     if (encodeInfo.size > 0 && encodedBuf != null) {
                         muxer.writeSampleData(muxAudioTrack, encodedBuf, encodeInfo);
+                        if (encodeInfo.presentationTimeUs > maxPtsWritten) {
+                            maxPtsWritten = encodeInfo.presentationTimeUs;
+                        }
                     }
                     boolean eos = (encodeInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
                     encoder.releaseOutputBuffer(encOutIdx, false);
@@ -758,5 +783,6 @@ public class NativeComposer {
         if (encoder != null) { encoder.stop(); encoder.release(); }
         if (decoder != null) { decoder.stop(); decoder.release(); }
         extractor.release();
+        return maxPtsWritten;
     }
 }
