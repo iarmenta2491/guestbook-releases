@@ -1096,6 +1096,18 @@ function TabVideoEditor({ clips: savedClips, draft, refreshClips }) {
   });
   const selectAll = () => setSelectedIds(new Set(allClips.map(c => c.id)));
   const clearSelection = () => setSelectedIds(new Set());
+
+  // File management handlers (also defined in TabDashboard — needed in this scope too)
+  const handleShareClips = async () => {
+    if (window.guestbook?.openClipsFolder) {
+      try { await window.guestbook.openClipsFolder(); } catch (e) { console.warn('shareClips:', e); }
+    }
+  };
+  const handleOpenFolder = async () => {
+    if (window.guestbook?.openEventFolder) {
+      try { await window.guestbook.openEventFolder(); } catch (e) { console.warn('openEventFolder:', e); }
+    }
+  };
   const addSelectedToTimeline = () => {
     allClips.filter(c => selectedIds.has(c.id)).forEach(addToTimeline);
     clearSelection();
